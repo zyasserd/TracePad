@@ -7,11 +7,11 @@ from multitouch_reader import touchpad_positions_generator, get_max_xy
 
 # === CONFIGURATION ===
 DEVICE_PATH = '/dev/input/event6'
-PAD_COLOR = (0, 0, 0)          # Black rectangle for touchpad representation
-DRAW_COLOR = (0, 0, 255)       # Blue for drawing trails
-CIRCLE_COLOR = (255, 0, 0)     # Red finger circle
+PAD_COLOR = (0, 0, 0)         # Black rectangle for touchpad representation
+DRAW_COLOR = (0, 0, 255)      # Blue for drawing trails
+CIRCLE_COLOR = (255, 0, 0)    # Red finger circle
 PEN_SIZE = 5
-PAD_SCREEN_COVERAGE_RATIO = 0.5
+PAD_SCREEN_COVERAGE_RATIO = 0.6
 FPS = 60
 
 # === INIT TOUCHPAD BOUNDS ===
@@ -30,6 +30,13 @@ screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 pygame.display.set_caption("Multitouch Finger Tracker with Drawing")
 clock = pygame.time.Clock()
 screen_width, screen_height = screen.get_size()
+
+# Hide the mouse cursor
+pygame.mouse.set_visible(False)
+
+# Create a drawing surface that persists
+drawing_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA) # SRCALPHA for transparency
+drawing_surface.fill((0, 0, 0, 0)) # Fill with transparent black initially
 
 # === CALCULATE TOUCHPAD RECTANGLE ===
 touchpad_aspect = max_x / max_y
@@ -61,14 +68,22 @@ reader_thread.start()
 # === MAIN LOOP ===
 running = True
 while running:
-    screen.fill((255, 255, 255))  # White background
+    # Handle quit
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_q:
+            running = False
 
-    # Draw the touchpad rectangle
+    screen.fill((255, 255, 255))  # White background for current frame elements
+
+    # Draw the touchpad rectangle on the main screen
     pygame.draw.rect(screen, PAD_COLOR, pad_rect, 2)
 
     active_slots = set(finger_positions.keys())
 
-    # Remove trails of lifted fingers
+    # Remove trails of lifted fingers - this now clears from the finger_trails data,
+    # but the drawing on drawing_surface remains.
     for slot in list(finger_trails.keys()):
         if slot not in active_slots:
             del finger_trails[slot]
@@ -83,30 +98,27 @@ while running:
         px = pad_rect.left + norm_x * pad_rect.width
         py = pad_rect.top + norm_y * pad_rect.height
 
-        # Draw red circle
+        # Draw red circle on the main screen
         pygame.draw.circle(screen, CIRCLE_COLOR, (int(px), int(py)), 12)
 
-        # Draw trail
+        # Update and draw trail on the drawing_surface
         if slot not in finger_trails:
             finger_trails[slot] = [(px, py)]
         else:
+            # Draw the line segment from the last point to the current point
+            last_pos = finger_trails[slot][-1]
+            pygame.draw.line(drawing_surface, DRAW_COLOR, last_pos, (px, py), PEN_SIZE)
             finger_trails[slot].append((px, py))
-            if len(finger_trails[slot]) > 300:  # Optional: trail length limit
+
+            # Optional: trail length limit for the stored points, not the drawing itself
+            if len(finger_trails[slot]) > 300:
                 finger_trails[slot] = finger_trails[slot][-300:]
 
-        # Draw trail as a polyline
-        if len(finger_trails[slot]) > 1:
-            pygame.draw.lines(screen, DRAW_COLOR, False, finger_trails[slot], PEN_SIZE)
+    # Blit the persistent drawing surface onto the main screen
+    screen.blit(drawing_surface, (0, 0))
 
     pygame.display.flip()
     clock.tick(FPS)
-
-    # Handle quit
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.KEYDOWN and event.key == pygame.K_q:
-            running = False
 
 pygame.quit()
 sys.exit(0)
