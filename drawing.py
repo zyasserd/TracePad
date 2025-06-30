@@ -10,7 +10,6 @@ from multitouch_reader import touchpad_positions_generator, get_max_xy
 DEVICE_PATH = '/dev/input/event6'
 PAD_COLOR = (0, 0, 0)         # Black rectangle for touchpad representation
 CIRCLE_COLOR = (255, 0, 0)    # Red finger circle for active touches
-PEN_SIZE = 5                  # Default pen size
 PAD_SCREEN_COVERAGE_RATIO = 0.6
 FPS = 60
 
@@ -20,22 +19,27 @@ CLEAR_KEY = pygame.K_c      # Key to clear the canvas
 SAVE_KEY = pygame.K_s       # Key to save the drawing as PNG
 ROTATE_PEN_KEY = pygame.K_TAB # Key to rotate through pen types (Tab key)
 
+# --- Visual Indicator Configuration ---
+INDICATOR_SIZE = 40
+INDICATOR_MARGIN = 15
+INDICATOR_BG_COLOR = (200, 200, 200, 150) # Light grey, semi-transparent background
+
 # === PEN DEFINITIONS ===
 # Each pen is a dictionary with its properties
 PENS = [
     {
         "mode": "draw",
-        "color": (0, 0, 0), # Blue
+        "color": (0, 0, 0), # Black
         "size": 5,
     },
     {
         "mode": "draw",
         "color": (0, 0, 255), # Blue
-        "size": 5,
+        "size": 8, # Slightly thicker blue pen
     },
     {
         "mode": "pointer",
-        "color": (255, 0, 0), # Red (will be used for temporary outline if we wanted)
+        "color": (255, 255, 255), # White color for pointer (not used for drawing, but good for indicator)
         "size": 0, # No size for drawing, just pointer
     }
 ]
@@ -64,7 +68,7 @@ screen_width, screen_height = screen.get_size()
 pygame.mouse.set_visible(False)
 
 # Create a drawing surface that persists
-drawing_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA) # SRCALPHA for transparency
+drawing_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
 drawing_surface.fill((0, 0, 0, 0)) # Fill with transparent black initially
 
 # === CALCULATE TOUCHPAD RECTANGLE ===
@@ -119,7 +123,6 @@ while running:
             elif event.key == ROTATE_PEN_KEY:
                 current_pen_index = (current_pen_index + 1) % len(PENS)
                 # When switching pens, clear last_drawn_pos to prevent spurious lines
-                # when resuming drawing with a new pen after a pointer.
                 finger_last_drawn_pos.clear()
 
     screen.fill((255, 255, 255))  # White background for current frame elements
@@ -149,7 +152,7 @@ while running:
         # Map to pad coordinates
         current_px = pad_rect.left + norm_x * pad_rect.width
         current_py = pad_rect.top + norm_y * pad_rect.height
-        current_pos = (int(current_px), int(current_py))
+        current_pos = (int(current_px), int(current_py)) # Convert to int for pygame.draw
 
         # Always draw the red finger circle on the main screen for active touches
         pygame.draw.circle(screen, CIRCLE_COLOR, current_pos, 12)
@@ -157,7 +160,8 @@ while running:
         # Handle drawing based on current pen mode
         if draw_mode: # If the current pen is a 'draw' type
             if slot not in finger_last_drawn_pos:
-                # If this is a new finger down, start its trail from current position
+                # If this is a new finger down, draw a starting circle (no line yet)
+                pygame.draw.circle(drawing_surface, pen_color, current_pos, pen_size // 2)
                 finger_last_drawn_pos[slot] = current_pos
             else:
                 # Draw a line segment from the last drawn position to the current position
@@ -166,13 +170,50 @@ while running:
                     pygame.draw.line(drawing_surface, pen_color, last_pos, current_pos, pen_size)
                     finger_last_drawn_pos[slot] = current_pos # Update last drawn position
         else: # If the current pen is a 'pointer' type (or any other non-drawing mode)
-            # Ensure last_drawn_pos is cleared if this slot was previously drawing,
-            # so that when we switch back to a draw mode, it doesn't connect to old points.
             if slot in finger_last_drawn_pos:
                 del finger_last_drawn_pos[slot]
 
     # Blit the persistent drawing surface onto the main screen
     screen.blit(drawing_surface, (0, 0))
+
+    # --- Draw Pen Indicator ---
+    indicator_rect = pygame.Rect(
+        screen_width - INDICATOR_SIZE - INDICATOR_MARGIN,
+        INDICATOR_MARGIN,
+        INDICATOR_SIZE,
+        INDICATOR_SIZE
+    )
+    # Draw indicator background
+    pygame.draw.rect(screen, INDICATOR_BG_COLOR, indicator_rect, border_radius=5)
+
+    # Draw pen visual inside the indicator using basic pygame.draw
+    if current_pen["mode"] == "draw":
+        indicator_center_x = indicator_rect.centerx
+        indicator_center_y = indicator_rect.centery
+        # Draw a small rectangle or circle representing the pen's color and size
+        indicator_pen_size_visual = current_pen["size"] * 0.8
+        if indicator_pen_size_visual < 3: indicator_pen_size_visual = 3 # Ensure visibility
+        
+        # Draw a filled circle as the indicator for draw pens
+        pygame.draw.circle(screen, current_pen["color"], 
+                           (indicator_center_x, indicator_center_y), 
+                           int(indicator_pen_size_visual // 2))
+
+    else: # Pointer mode
+        indicator_center_x = indicator_rect.centerx
+        indicator_center_y = indicator_rect.centery
+        pointer_line_len = INDICATOR_SIZE * 0.3
+        pointer_color = (100, 100, 100) # Dark grey for pointer icon
+
+        # Draw a simple crosshair
+        pygame.draw.line(screen, pointer_color,
+                         (indicator_center_x - pointer_line_len, indicator_center_y),
+                         (indicator_center_x + pointer_line_len, indicator_center_y), 3)
+        pygame.draw.line(screen, pointer_color,
+                         (indicator_center_x, indicator_center_y - pointer_line_len),
+                         (indicator_center_x, indicator_center_y + pointer_line_len), 3)
+        pygame.draw.circle(screen, pointer_color, (indicator_center_x, indicator_center_y), int(pointer_line_len * 0.7), 2)
+
 
     pygame.display.flip()
     clock.tick(FPS)
