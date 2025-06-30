@@ -2,12 +2,13 @@ import pygame
 import threading
 import time
 import sys
-import os
 
-from multitouch_reader import touchpad_positions_generator, get_max_xy
+from multitouch_reader import touchpad_positions_generator, get_max_xy, find_touchpad
+
+
+DEVICE_PATH = find_touchpad()
 
 # === CONFIGURATION ===
-DEVICE_PATH = '/dev/input/event6'
 PAD_COLOR = (0, 0, 0)         # Black rectangle for touchpad representation
 CIRCLE_COLOR = (255, 0, 0)    # Red finger circle for active touches
 PAD_SCREEN_COVERAGE_RATIO = 0.6
@@ -111,7 +112,6 @@ while running:
             elif event.key == CLEAR_KEY:
                 drawing_surface.fill((0, 0, 0, 0)) # Clear the drawing surface
                 finger_last_drawn_pos.clear() # Clear last drawn positions
-                print("Canvas cleared.")
             elif event.key == SAVE_KEY:
                 timestamp = time.strftime("%Y%m%d-%H%M%S")
                 filename = f"drawing_{timestamp}.png"
@@ -176,6 +176,7 @@ while running:
     # Blit the persistent drawing surface onto the main screen
     screen.blit(drawing_surface, (0, 0))
 
+
     # --- Draw Pen Indicator ---
     indicator_rect = pygame.Rect(
         screen_width - INDICATOR_SIZE - INDICATOR_MARGIN,
@@ -185,23 +186,20 @@ while running:
     )
     # Draw indicator background
     pygame.draw.rect(screen, INDICATOR_BG_COLOR, indicator_rect, border_radius=5)
+    indicator_center_x = indicator_rect.centerx
+    indicator_center_y = indicator_rect.centery
 
     # Draw pen visual inside the indicator using basic pygame.draw
     if current_pen["mode"] == "draw":
-        indicator_center_x = indicator_rect.centerx
-        indicator_center_y = indicator_rect.centery
         # Draw a small rectangle or circle representing the pen's color and size
-        indicator_pen_size_visual = current_pen["size"] * 0.8
-        if indicator_pen_size_visual < 3: indicator_pen_size_visual = 3 # Ensure visibility
+        indicator_pen_size_visual = max(current_pen["size"], 3) # Ensure visibility
         
         # Draw a filled circle as the indicator for draw pens
         pygame.draw.circle(screen, current_pen["color"], 
                            (indicator_center_x, indicator_center_y), 
-                           int(indicator_pen_size_visual // 2))
+                           indicator_pen_size_visual // 2)
 
     else: # Pointer mode
-        indicator_center_x = indicator_rect.centerx
-        indicator_center_y = indicator_rect.centery
         pointer_line_len = INDICATOR_SIZE * 0.3
         pointer_color = (100, 100, 100) # Dark grey for pointer icon
 

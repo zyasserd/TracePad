@@ -1,19 +1,34 @@
-from evdev import InputDevice, list_devices, categorize, ecodes
+from evdev import InputDevice, list_devices, ecodes
 from typing import Optional, Tuple
 from collections import defaultdict
 
 
 def find_touchpad() -> Optional[str]:
-    # TODO: fix
-    """Find a device that supports ABS_X and ABS_Y (likely a touchpad)."""
     for path in list_devices():
-        dev = InputDevice(path)
-        caps = dev.capabilities()
-        if ecodes.EV_ABS in caps:
-            abs_codes = [ecodes.ABS[code] for code, _ in caps[ecodes.EV_ABS]]
-            if 'ABS_X' in abs_codes and 'ABS_Y' in abs_codes:
-                print(f"Found touchpad: {dev.name} at {path}")
+        try:
+            dev = InputDevice(path)
+            caps = dev.capabilities()
+
+            # Check for multitouch position axes
+            abs_caps = caps.get(ecodes.EV_ABS, [])
+            abs_codes = set(code for code, _ in abs_caps)
+
+            has_mt = ecodes.ABS_MT_POSITION_X in abs_codes and ecodes.ABS_MT_POSITION_Y in abs_codes
+            has_xy = ecodes.ABS_X in abs_codes and ecodes.ABS_Y in abs_codes
+
+            # Heuristic: likely touchpad
+            if has_xy and has_mt:
+                if "touchpad" in dev.name.lower() or "trackpad" in dev.name.lower():
+                    print(f"Found touchpad: {dev.name} at {path}")
+                    return path
+                # Some devices may not follow naming conventions
+                # Still return if multitouch is supported
+                print(f"Found likely touchpad: {dev.name} at {path}")
                 return path
+
+        except Exception as e:
+            continue
+
     print("Touchpad not found.")
     return None
 
@@ -63,5 +78,7 @@ def touchpad_positions_generator(device_path: str):
 
 # 🧪 Run all steps
 if __name__ == '__main__':
-    path = '/dev/input/event6'  # update accordingly
-    max_x, max_y = get_max_xy(path)
+    dev_path = find_touchpad()
+    print(get_max_xy(dev_path))
+    for v in touchpad_positions_generator(dev_path):
+        print(v)
