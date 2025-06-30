@@ -33,6 +33,7 @@ def get_max_xy(device_path: str) -> Tuple[int, int]:
         caps_dict.get(ecodes.ABS_Y).max
     )
 
+
 def touchpad_positions_generator(device_path: str):
     """Reads multitouch data (ABS_MT_*) grouped by SYN_REPORT frames."""
     dev = InputDevice(device_path)
@@ -59,8 +60,8 @@ def touchpad_positions_generator(device_path: str):
             fingers = {slot: data.copy() for slot, data in frame_data.items() if 'x' in data and 'y' in data}
             yield fingers
 
-# 🧪 Run all steps
 
+# 🧪 Run all steps
 if __name__ == '__main__':
     path = '/dev/input/event6'  # update accordingly
     max_x, max_y = get_max_xy(path)
