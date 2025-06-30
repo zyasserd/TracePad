@@ -2,17 +2,22 @@ import pygame
 import threading
 import time
 import sys
+import os # Import os for path manipulation and timestamp for unique filenames
 
 from multitouch_reader import touchpad_positions_generator, get_max_xy
 
 # === CONFIGURATION ===
 DEVICE_PATH = '/dev/input/event6'
 PAD_COLOR = (0, 0, 0)         # Black rectangle for touchpad representation
-DRAW_COLOR = (0, 0, 255)      # Blue for drawing trails
+DRAW_COLOR = (0, 0, 0)      # Blue for drawing trails
 CIRCLE_COLOR = (255, 0, 0)    # Red finger circle
 PEN_SIZE = 5
 PAD_SCREEN_COVERAGE_RATIO = 0.6
 FPS = 60
+
+# --- New Key Bindings ---
+CLEAR_KEY = pygame.K_c      # Key to clear the canvas
+SAVE_KEY = pygame.K_s       # Key to save the drawing as PNG
 
 # === INIT TOUCHPAD BOUNDS ===
 max_x, max_y = get_max_xy(DEVICE_PATH)
@@ -68,12 +73,24 @@ reader_thread.start()
 # === MAIN LOOP ===
 running = True
 while running:
-    # Handle quit
+    # Handle events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        elif event.type == pygame.KEYDOWN and event.key == pygame.K_q:
-            running = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_q: # Quit key
+                running = False
+            elif event.key == CLEAR_KEY: # Clear canvas
+                drawing_surface.fill((0, 0, 0, 0)) # Fill with transparent black
+                finger_trails.clear() # Also clear the trail history
+            elif event.key == SAVE_KEY: # Save drawing as PNG
+                timestamp = time.strftime("%Y%m%d-%H%M%S")
+                filename = f"drawing_{timestamp}.png"
+                try:
+                    pygame.image.save(drawing_surface, filename)
+                    print(f"Drawing saved as {filename}")
+                except pygame.error as e:
+                    print(f"Error saving image: {e}")
 
     screen.fill((255, 255, 255))  # White background for current frame elements
 
@@ -82,8 +99,7 @@ while running:
 
     active_slots = set(finger_positions.keys())
 
-    # Remove trails of lifted fingers - this now clears from the finger_trails data,
-    # but the drawing on drawing_surface remains.
+    # Remove trails of lifted fingers from the data structure (drawing remains)
     for slot in list(finger_trails.keys()):
         if slot not in active_slots:
             del finger_trails[slot]
