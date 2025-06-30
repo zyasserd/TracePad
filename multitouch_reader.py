@@ -24,9 +24,9 @@ def get_max_xy(device_path: str) -> Tuple[int, int]:
     caps = dev.capabilities().get(ecodes.EV_ABS, [])
     caps_dict = dict(caps)
 
-    for code, absinfo in caps:
-        name = ecodes.ABS.get(code, f'UNKNOWN({code})')
-        print(f"{name:<20} {absinfo}")
+    # for code, absinfo in caps:
+    #     name = ecodes.ABS.get(code, f'UNKNOWN({code})')
+    #     print(f"{name:<20} {absinfo}")
 
     return (
         caps_dict.get(ecodes.ABS_X).max,
