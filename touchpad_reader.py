@@ -1,9 +1,13 @@
-from evdev import InputDevice, list_devices, ecodes
+import sys
+import json
+import os
 from typing import Optional, Tuple
 from collections import defaultdict
+from evdev import InputDevice, list_devices, ecodes
+import psutil
 
 
-def find_touchpad() -> Optional[str]:
+def find_touchpad() -> Tuple[Optional[str], str]:
     for path in list_devices():
         try:
             dev = InputDevice(path)
@@ -20,17 +24,17 @@ def find_touchpad() -> Optional[str]:
             if has_xy and has_mt:
                 if "touchpad" in dev.name.lower() or "trackpad" in dev.name.lower():
                     # print(f"Found touchpad: {dev.name} at {path}")
-                    return path
+                    return path, "match"
                 # Some devices may not follow naming conventions
                 # Still return if multitouch is supported
                 # print(f"Found likely touchpad: {dev.name} at {path}")
-                return path
+                return path, "likely match"
 
         except Exception as e:
             continue
 
     # print("Touchpad not found.")
-    return None
+    return None, "not found"
 
 
 def get_max_xy(device_path: str) -> Tuple[int, int]:
@@ -76,9 +80,48 @@ def touchpad_positions_generator(device_path: str):
             yield fingers
 
 
-# 🧪 Run all steps
+def is_parent_alive(parent_pid: int) -> bool:
+    try:
+        p = psutil.Process(parent_pid)
+        return p.is_running() and p.pid == parent_pid
+    except psutil.NoSuchProcess:
+        return False
+    except Exception as e:
+        sys.stderr.write(f"Error checking parent process: {e}\n")
+        return False
+
+
 if __name__ == '__main__':
-    dev_path = find_touchpad()
-    print(get_max_xy(dev_path))
-    for v in touchpad_positions_generator(dev_path):
-        print(v)
+    parent_pid = os.getppid()
+    device_path, match_status = find_touchpad()
+
+    if not device_path:
+        print(json.dumps({"error": "touchpad_not_found", "message": "No touchpad device found or accessible."}), flush=True)
+        sys.exit(1)
+    
+    try:
+        max_x, max_y = get_max_xy(device_path)
+        print(json.dumps({
+            "event": "device_info",
+            "data": {
+                "max_x": max_x,
+                "max_y": max_y,
+                "detection_status": match_status
+            }
+        }), flush=True)
+
+        for fingers in touchpad_positions_generator(device_path):
+            if not is_parent_alive(parent_pid):
+                print(json.dumps({"event": "shutdown", "reason": "parent_process_terminated"}), flush=True)
+                break
+            print(json.dumps({
+                "event": "touch_update",
+                "data": fingers
+            }), flush=True)
+        
+    except Exception as e:
+        print(json.dumps({"error": "evdev_reader_error", "message": str(e)}), flush=True)
+        sys.exit(1)
+    finally:
+        print(json.dumps({"event": "shutdown", "reason": "reader_finished"}), flush=True)
+        sys.stdout.flush()
