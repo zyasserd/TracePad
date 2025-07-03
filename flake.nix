@@ -53,6 +53,7 @@
 
             pygobject3
             pygobject-stubs # for autocompletion
+            pycairo
           ]))
         ] ++ (with pkgs; [
           libadwaita

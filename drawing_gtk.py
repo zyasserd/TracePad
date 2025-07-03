@@ -4,6 +4,7 @@ import threading
 import sys
 import os
 import json
+import cairo
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
@@ -113,13 +114,31 @@ class MainWindow(Gtk.ApplicationWindow):
         
 
         # [[ DRAWING AREA ]]
-        self.coverage = 0.8
+        self.coverage = 0.6
         self.drawing_area = Gtk.DrawingArea()
         self.drawing_area.set_draw_func(self.on_draw)
         self.finger_positions = {}
+        # Store paths as: slot -> list of segments, each segment is dict with 'points' and 'pen_type'
+        self.paths = {}  # slot: [ {'points': [(x, y), ...], 'pen_type': ...}, ... ]
+        self.active_segments = {}  # slot: current segment being drawn
+        self.current_pen_type_idx = 0
+        self.default_pen_types = [
+            {'name': 'red', 'color': (1, 0, 0, 0.8), 'thickness': 4},
+            {'name': 'green', 'color': (0, 1, 0, 0.8), 'thickness': 4},
+            {'name': 'blue', 'color': (0, 0, 1, 0.8), 'thickness': 4},
+            {'name': 'black', 'color': (0, 0, 0, 0.8), 'thickness': 8},
+            {'name': 'highlighter', 'color': (1, 1, 0, 0.3), 'thickness': 18},
+        ]
+        self.current_pen_type = self.default_pen_types[self.current_pen_type_idx]
+        # For performance: cache the drawing as a cairo.ImageSurface
+        self._drawing_cache = None
+        self._drawing_cache_valid = False
+
+        # ...existing code...
 
     def handle_device_info(self):
         # Get window size (fullscreen, so only set once)
+        # TODO: depreciated
         win_width = self.get_allocated_width()
         win_height = self.get_allocated_height()
 
@@ -142,24 +161,134 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_child(self.drawing_area)
 
     def handle_touchpad_event(self, event):
+        prev_slots = set(self.finger_positions.keys())
         self.finger_positions = event.get('data', {})
+        new_slots = set(self.finger_positions.keys())
+        # For each slot, if new, start a new segment with current pen type
+        for slot in new_slots:
+            info = self.finger_positions[slot]
+            x = info.get('x', 0)
+            y = info.get('y', 0)
+            if slot not in self.active_segments:
+                # New touch: start new segment
+                seg = {'points': [(x, y)], 'pen_type': self.current_pen_type.copy()}
+                self.active_segments[slot] = seg
+            else:
+                self.active_segments[slot]['points'].append((x, y))
+        # For slots that disappeared, commit their segment to paths
+        for slot in prev_slots - new_slots:
+            if slot in self.active_segments:
+                if slot not in self.paths:
+                    self.paths[slot] = []
+                self.paths[slot].append(self.active_segments[slot])
+                del self.active_segments[slot]
+                self._drawing_cache_valid = False  # New stroke, need redraw
+        # If any new points were added to active segments, mark cache invalid
+        if new_slots:
+            self._drawing_cache_valid = False
         self.drawing_area.queue_draw()
-    
-    def on_draw(self, area, cr, width, height):
-        # Draw border and fingers as before...
+
+    def cycle_pen_type(self):
+        self.current_pen_type_idx = (self.current_pen_type_idx + 1) % len(self.default_pen_types)
+        self.current_pen_type = self.default_pen_types[self.current_pen_type_idx].copy()
+
+    def draw_all(self, cr, width, height, draw_background=True, draw_fingers=True):
+        # Optionally fill background (for SVG)
+        if draw_background:
+            cr.save()
+            cr.set_source_rgb(1, 1, 1)
+            # cr.rectangle(0, 0, width, height)
+            cr.fill()
+            cr.restore()
+        # Draw border
         cr.set_source_rgba(1, 0, 0, 1)
         cr.set_line_width(2)
         cr.rectangle(1, 1, width-2, height-2)
         cr.stroke()
+        max_x = self.touchpad_reader.max_x
+        max_y = self.touchpad_reader.max_y
+        # Draw cached finished paths
+        for slot, segments in self.paths.items():
+            for seg in segments:
+                pts = seg['points']
+                pen = seg['pen_type']
+                if len(pts) < 2:
+                    continue
+                cr.set_source_rgba(*pen['color'])
+                cr.set_line_width(pen['thickness'])
+                for i, (x, y) in enumerate(pts):
+                    sx = x / max_x * width
+                    sy = y / max_y * height
+                    if i == 0:
+                        cr.move_to(sx, sy)
+                    else:
+                        cr.line_to(sx, sy)
+                cr.stroke()
+        # Draw active segments (not yet committed)
+        for slot, seg in self.active_segments.items():
+            pts = seg['points']
+            pen = seg['pen_type']
+            if len(pts) < 2:
+                continue
+            cr.set_source_rgba(*pen['color'])
+            cr.set_line_width(pen['thickness'])
+            for i, (x, y) in enumerate(pts):
+                sx = x / max_x * width
+                sy = y / max_y * height
+                if i == 0:
+                    cr.move_to(sx, sy)
+                else:
+                    cr.line_to(sx, sy)
+            cr.stroke()
+        # Draw current finger positions as circles
+        if draw_fingers:
+            for i, (slot, info) in enumerate(self.finger_positions.items()):
+                x = info.get('x', 0)
+                y = info.get('y', 0)
+                draw_x = x / max_x * width
+                draw_y = y / max_y * height
+                pen = self.current_pen_type
+                cr.set_source_rgba(*pen['color'])
+                cr.arc(draw_x, draw_y, 15, 0, 2*3.1416)
+                cr.fill()
 
-        for i, (slot, info) in enumerate(self.finger_positions.items()):
-            x = info.get('x', 0)
-            y = info.get('y', 0)
-            draw_x = x / self.touchpad_reader.max_x * width
-            draw_y = y / self.touchpad_reader.max_y * height
-            cr.set_source_rgba(1, 0, 0, 0.8) if i == 0 else cr.set_source_rgba(0, 1, 0, 0.8)
-            cr.arc(draw_x, draw_y, 30, 0, 2*3.1416)
-            cr.fill()
+    def _update_drawing_cache(self):
+        width = self.drawing_area.get_allocated_width()
+        height = self.drawing_area.get_allocated_height()
+        if width <= 0 or height <= 0:
+            return
+        self._drawing_cache = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
+        cr = cairo.Context(self._drawing_cache)
+        self.draw_all(cr, width, height, draw_background=True, draw_fingers=False)
+        self._drawing_cache_valid = True
+
+    def on_draw(self, area, cr, width, height):
+        # Only redraw finished paths if cache is invalid
+        if not self._drawing_cache_valid or self._drawing_cache is None:
+            self._update_drawing_cache()
+        if self._drawing_cache:
+            cr.set_source_surface(self._drawing_cache, 0, 0)
+            cr.paint()
+        # Draw active segments and fingers live
+        self.draw_all(cr, width, height, draw_background=False, draw_fingers=True)
+
+    def save_as_svg(self):
+        # Save the current drawing as SVG
+        dialog = Gtk.FileDialog.new()
+        dialog.set_title("Save as SVG")
+        def on_response(dialog, result):
+            file = dialog.save_finish(result)
+            if file:
+                path = file.get_path()
+                self._export_svg(path)
+        dialog.save(self, None, on_response)
+
+    def _export_svg(self, path):
+        width = self.drawing_area.get_allocated_width()
+        height = self.drawing_area.get_allocated_height()
+        with cairo.SVGSurface(path, width, height) as surface:
+            cr = cairo.Context(surface)
+            self.draw_all(cr, width, height, draw_background=True, draw_fingers=False)
 
     def handle_touchpad_error(self, message):
         dialog = Gtk.MessageDialog(
@@ -178,10 +307,23 @@ class MainWindow(Gtk.ApplicationWindow):
         self.touchpad_reader.stop()
         self.get_application().quit()
 
+    def clear_drawing(self):
+        self.paths.clear()
+        self.active_segments.clear()
+        self._drawing_cache = None
+        self._drawing_cache_valid = False
+        self.drawing_area.queue_draw()
+
     def on_key(self, controller, keyval, keycode, state):
         if keyval == Gdk.KEY_Escape or keyval == Gdk.KEY_q or keyval == Gdk.KEY_Q:
             self.touchpad_reader.stop()
             self.get_application().quit()
+        elif keyval == Gdk.KEY_s or keyval == Gdk.KEY_S:
+            self.save_as_svg()
+        elif keyval == Gdk.KEY_p or keyval == Gdk.KEY_P:
+            self.cycle_pen_type()
+        elif keyval == Gdk.KEY_c or keyval == Gdk.KEY_C:
+            self.clear_drawing()
 
 class MyApp(Adw.Application):
     def __init__(self):
