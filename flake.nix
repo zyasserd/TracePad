@@ -49,11 +49,20 @@
             evdev
             tkinter
             pygame
+            psutil
+
+            pygobject3
+            pygobject-stubs # for autocompletion
           ]))
-        ];
+        ] ++ (with pkgs; [
+          libadwaita
+          gobject-introspection
+          # wrapGAppsHook4
+        ]);
 
         # Set any environment variables for your dev shell
         env = {
+          GDK_BACKEND = "wayland"; # required to make the app run wayland
         };
 
         # Add any shell logic you want executed any time the environment is activated

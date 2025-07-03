@@ -19,17 +19,17 @@ def find_touchpad() -> Optional[str]:
             # Heuristic: likely touchpad
             if has_xy and has_mt:
                 if "touchpad" in dev.name.lower() or "trackpad" in dev.name.lower():
-                    print(f"Found touchpad: {dev.name} at {path}")
+                    # print(f"Found touchpad: {dev.name} at {path}")
                     return path
                 # Some devices may not follow naming conventions
                 # Still return if multitouch is supported
-                print(f"Found likely touchpad: {dev.name} at {path}")
+                # print(f"Found likely touchpad: {dev.name} at {path}")
                 return path
 
         except Exception as e:
             continue
 
-    print("Touchpad not found.")
+    # print("Touchpad not found.")
     return None
 
 
