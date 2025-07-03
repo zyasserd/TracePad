@@ -8,7 +8,7 @@ import cairo
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, Gdk, GdkPixbuf, GLib
+from gi.repository import Gtk, Adw, Gdk, GLib
 
 
 class TouchpadReaderThread:
@@ -86,16 +86,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.fullscreen()
 
         # [[ CURSOR ]]
-        # Create a 1x1 transparent pixbuf
-        pixbuf = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 1, 1)
-        pixbuf.fill(0x00000000)  # Fully transparent
-
-        # Convert Pixbuf to Texture
-        texture = Gdk.Texture.new_for_pixbuf(pixbuf)
-
-        # Create blank cursor from texture with hotspot (0,0)
-        blank_cursor = Gdk.Cursor.new_from_texture(texture, 0, 0)
-        self.set_cursor(blank_cursor)
+        self.set_cursor(Gdk.Cursor.new_from_name("none"))
 
 
         # [[ TOUCHPAD THREAD ]]
