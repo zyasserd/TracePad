@@ -46,14 +46,11 @@
         # Add any you need here
         packages = [ 
           (python.withPackages (p: with p; [
-            evdev
-            tkinter
-            pygame
-            psutil
-
             pygobject3
             pygobject-stubs # for autocompletion
             pycairo
+            evdev
+            psutil
           ]))
         ] ++ (with pkgs; [
           libadwaita
