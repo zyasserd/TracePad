@@ -134,7 +134,8 @@ class MainWindow(Gtk.ApplicationWindow):
         self._drawing_cache = None
         self._drawing_cache_valid = False
 
-        # ...existing code...
+        self.undo_stack = []  # Stack for undo
+        self.redo_stack = []  # Stack for redo
 
     def handle_device_info(self):
         # Get window size (fullscreen, so only set once)
@@ -180,6 +181,9 @@ class MainWindow(Gtk.ApplicationWindow):
             if slot in self.active_segments:
                 if slot not in self.paths:
                     self.paths[slot] = []
+                # Save state for undo before committing
+                self.undo_stack.append((self._copy_paths(), self._copy_active_segments()))
+                self.redo_stack.clear()
                 self.paths[slot].append(self.active_segments[slot])
                 del self.active_segments[slot]
                 self._drawing_cache_valid = False  # New stroke, need redraw
@@ -192,12 +196,12 @@ class MainWindow(Gtk.ApplicationWindow):
         self.current_pen_type_idx = (self.current_pen_type_idx + 1) % len(self.default_pen_types)
         self.current_pen_type = self.default_pen_types[self.current_pen_type_idx].copy()
 
-    def draw_all(self, cr, width, height, draw_background=True, draw_fingers=True):
+    def draw_all(self, cr, width, height, draw_background=False, draw_fingers=True):
         # Optionally fill background (for SVG)
         if draw_background:
             cr.save()
             cr.set_source_rgb(1, 1, 1)
-            # cr.rectangle(0, 0, width, height)
+            cr.rectangle(0, 0, width, height)
             cr.fill()
             cr.restore()
         # Draw border
@@ -259,7 +263,7 @@ class MainWindow(Gtk.ApplicationWindow):
             return
         self._drawing_cache = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
         cr = cairo.Context(self._drawing_cache)
-        self.draw_all(cr, width, height, draw_background=True, draw_fingers=False)
+        self.draw_all(cr, width, height, draw_background=False, draw_fingers=False)
         self._drawing_cache_valid = True
 
     def on_draw(self, area, cr, width, height):
@@ -269,7 +273,7 @@ class MainWindow(Gtk.ApplicationWindow):
         if self._drawing_cache:
             cr.set_source_surface(self._drawing_cache, 0, 0)
             cr.paint()
-        # Draw active segments and fingers live
+        # Draw active segments and fingers live (not cached)
         self.draw_all(cr, width, height, draw_background=False, draw_fingers=True)
 
     def save_as_svg(self):
@@ -308,14 +312,51 @@ class MainWindow(Gtk.ApplicationWindow):
         self.get_application().quit()
 
     def clear_drawing(self):
+        # Push current state to undo stack before clearing
+        self.undo_stack.append((self._copy_paths(), self._copy_active_segments()))
+        self.redo_stack.clear()
         self.paths.clear()
         self.active_segments.clear()
         self._drawing_cache = None
         self._drawing_cache_valid = False
         self.drawing_area.queue_draw()
 
+    def undo_last_stroke(self):
+        # Save current state to redo stack
+        if self.paths or self.active_segments:
+            self.redo_stack.append((self._copy_paths(), self._copy_active_segments()))
+        if self.undo_stack:
+            prev_paths, prev_active = self.undo_stack.pop()
+            self.paths = prev_paths
+            self.active_segments = {}  # Always clear active segments after undo
+            self._drawing_cache_valid = False
+            self.drawing_area.queue_draw()
+
+    def redo_last_stroke(self):
+        if self.redo_stack:
+            # Save current state to undo stack
+            self.undo_stack.append((self._copy_paths(), self._copy_active_segments()))
+            next_paths, next_active = self.redo_stack.pop()
+            self.paths = next_paths
+            self.active_segments = {}  # Always clear active segments after redo
+            self._drawing_cache_valid = False
+            self.drawing_area.queue_draw()
+
+    def _copy_paths(self):
+        # Deep copy paths for undo/redo
+        import copy
+        return copy.deepcopy(self.paths)
+
+    def _copy_active_segments(self):
+        import copy
+        return copy.deepcopy(self.active_segments)
+
     def on_key(self, controller, keyval, keycode, state):
-        if keyval == Gdk.KEY_Escape or keyval == Gdk.KEY_q or keyval == Gdk.KEY_Q:
+        if (keyval == Gdk.KEY_z or keyval == Gdk.KEY_Z) and (state & Gdk.ModifierType.CONTROL_MASK):
+            self.undo_last_stroke()
+        elif (keyval == Gdk.KEY_y or keyval == Gdk.KEY_Y) and (state & Gdk.ModifierType.CONTROL_MASK):
+            self.redo_last_stroke()
+        elif keyval == Gdk.KEY_Escape or keyval == Gdk.KEY_q or keyval == Gdk.KEY_Q:
             self.touchpad_reader.stop()
             self.get_application().quit()
         elif keyval == Gdk.KEY_s or keyval == Gdk.KEY_S:
