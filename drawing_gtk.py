@@ -11,7 +11,8 @@ from gi.repository import Gtk, Adw, Gdk, GdkPixbuf, GLib
 
 
 class TouchpadReaderThread:
-    def __init__(self, on_event, on_error):
+    def __init__(self, on_device_info, on_event, on_error):
+        self.on_device_info = on_device_info  # callback for device info
         self.on_event = on_event  # callback for normal events
         self.on_error = on_error  # callback for errors
         self.reader_process = None
@@ -56,6 +57,8 @@ class TouchpadReaderThread:
                 data = event.get('data', {})
                 self.max_x = data.get('max_x')
                 self.max_y = data.get('max_y')
+                if self.on_device_info:
+                    GLib.idle_add(self.on_device_info)
             elif event.get('event') == 'touch_update':
                 GLib.idle_add(self.on_event, event)
             
@@ -81,6 +84,7 @@ class MainWindow(Gtk.ApplicationWindow):
         super().__init__(*args, **kwargs)
         self.fullscreen()
 
+        # [[ CURSOR ]]
         # Create a 1x1 transparent pixbuf
         pixbuf = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 1, 1)
         pixbuf.fill(0x00000000)  # Fully transparent
@@ -92,26 +96,70 @@ class MainWindow(Gtk.ApplicationWindow):
         blank_cursor = Gdk.Cursor.new_from_texture(texture, 0, 0)
         self.set_cursor(blank_cursor)
 
-        self.label = Gtk.Label(label="Starting touchpad reader...\nCursor is hidden. Press Esc to exit.")
-        self.set_child(self.label)
 
+        # [[ TOUCHPAD THREAD ]]
+        self.touchpad_reader = TouchpadReaderThread(
+            self.handle_device_info,
+            self.handle_touchpad_event,
+            self.handle_touchpad_error
+        )
+        self.touchpad_reader.start()
+
+
+        # [[ KEYBINDINGS ]]
         key_controller = Gtk.EventControllerKey.new()
         key_controller.connect("key-pressed", self.on_key)
         self.add_controller(key_controller)
+        
 
-        self.touchpad_reader = TouchpadReaderThread(self.handle_touchpad_event, self.handle_touchpad_error)
-        self.touchpad_reader.start()
+        # [[ DRAWING AREA ]]
+        self.coverage = 0.8
+        self.drawing_area = Gtk.DrawingArea()
+        self.drawing_area.set_draw_func(self.on_draw)
+        self.finger_positions = {}
+
+    def handle_device_info(self):
+        # Get window size (fullscreen, so only set once)
+        win_width = self.get_allocated_width()
+        win_height = self.get_allocated_height()
+
+        # Calculate aspect ratio
+        aspect = self.touchpad_reader.max_x / self.touchpad_reader.max_y
+        # Calculate drawing area size based on coverage
+        if win_width / win_height > aspect:
+            # Window is wider than touchpad
+            height = int(win_height * self.coverage)
+            width = int(height * aspect)
+        else:
+            width = int(win_width * self.coverage)
+            height = int(width / aspect)
+        self.drawing_area.set_size_request(width, height)
+        # Center the drawing area
+        self.drawing_area.set_halign(Gtk.Align.CENTER)
+        self.drawing_area.set_valign(Gtk.Align.CENTER)
+
+        # show only after the resize
+        self.set_child(self.drawing_area)
 
     def handle_touchpad_event(self, event):
-        data = event.get('data', {})
-        # Show number of fingers and their positions
-        if data:
-            fingers = [f"Slot {slot}: x={info.get('x')}, y={info.get('y')}" for slot, info in data.items()]
-            msg = f"Fingers: {len(data)}\n" + "\n".join(fingers)
-        else:
-            msg = "No fingers detected."
-        self.append_label_message(msg)
-        
+        self.finger_positions = event.get('data', {})
+        self.drawing_area.queue_draw()
+    
+    def on_draw(self, area, cr, width, height):
+        # Draw border and fingers as before...
+        cr.set_source_rgba(1, 0, 0, 1)
+        cr.set_line_width(2)
+        cr.rectangle(1, 1, width-2, height-2)
+        cr.stroke()
+
+        for i, (slot, info) in enumerate(self.finger_positions.items()):
+            x = info.get('x', 0)
+            y = info.get('y', 0)
+            draw_x = x / self.touchpad_reader.max_x * width
+            draw_y = y / self.touchpad_reader.max_y * height
+            cr.set_source_rgba(1, 0, 0, 0.8) if i == 0 else cr.set_source_rgba(0, 1, 0, 0.8)
+            cr.arc(draw_x, draw_y, 30, 0, 2*3.1416)
+            cr.fill()
 
     def handle_touchpad_error(self, message):
         dialog = Gtk.MessageDialog(
@@ -130,14 +178,8 @@ class MainWindow(Gtk.ApplicationWindow):
         self.touchpad_reader.stop()
         self.get_application().quit()
 
-    def append_label_message(self, text):
-        # Show only the last 10 lines
-        current = self.label.get_text().split('\n')
-        current.append(text)
-        self.label.set_text('\n'.join(current[-10:]))
-
     def on_key(self, controller, keyval, keycode, state):
-        if keyval == Gdk.KEY_Escape:
+        if keyval == Gdk.KEY_Escape or keyval == Gdk.KEY_q or keyval == Gdk.KEY_Q:
             self.touchpad_reader.stop()
             self.get_application().quit()
 
