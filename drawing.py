@@ -139,9 +139,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def handle_device_info(self):
         # Get window size (fullscreen, so only set once)
-        # TODO: depreciated
-        win_width = self.get_allocated_width()
-        win_height = self.get_allocated_height()
+        win_width = self.get_size(orientation=Gtk.Orientation.HORIZONTAL)
+        win_height = self.get_size(orientation=Gtk.Orientation.VERTICAL)
 
         # Calculate aspect ratio
         aspect = self.touchpad_reader.max_x / self.touchpad_reader.max_y
@@ -257,8 +256,8 @@ class MainWindow(Gtk.ApplicationWindow):
                 cr.fill()
 
     def _update_drawing_cache(self):
-        width = self.drawing_area.get_allocated_width()
-        height = self.drawing_area.get_allocated_height()
+        width = self.drawing_area.get_size(orientation=Gtk.Orientation.HORIZONTAL)
+        height = self.drawing_area.get_size(orientation=Gtk.Orientation.VERTICAL)
         if width <= 0 or height <= 0:
             return
         self._drawing_cache = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)

@@ -1,33 +1,84 @@
-- use GTK4 + libadwaita
-	- Libadwaita
-	- https://github.com/Taiko2k/GTK4PythonTutorial
-- take control over the pointer
-	- it's really hard to do that in wayland. So, I just decided to go fullscreen and then hide the pointer
-- permission escalation
+- [x] UI & Framework
+	- use GTK4 + libadwaita
+		- Libadwaita
+		- https://github.com/Taiko2k/GTK4PythonTutorial
 
-- saving to an image
-	- add the saved images in a gallery on the left
-- different pen types with an indicator
-	- transparent highlighter
-- real-time stroke smoothing / Path Smoothing Algorithms
-	- mostly use a library or sth for that don't do it manually
-	- https://www.youtube.com/watch?v=ueUgHvUT2Z0
-	- https://willowsystems.github.io/jSignature/%2523%252Fabout%252Flinesmoothing%252F.html
-	- https://github.com/google/ink-stroke-modeler
-- undo last stroke
-- support `capacitive stylus` mode
-	- palm rejection
+	- take control over the pointer
+		- it's really hard to do that in wayland. So, I just decided to go fullscreen and then hide the pointer
 
+	- permission escalation
 
+- [ ] Refactoring
+	- understand the code
+	- understand how to cache and store strokes and points
+	- understand undo / redo
+	- improve drawing speed and responsivity
+		- don't draw from scratch everytime
+	- BUG dots don't draw
 
+- Drawing
+	- saving to an image
+		- svg / png / jpg
+			- convert from svg to png or jpg
+		- add the saved images in a gallery on the left
 
+	- different pen types with an indicator
+		- transparent highlighter
+		- a pointer that doesn't write
+		- asymmetric brush is an oval slanted diagonally and locked in that slant regardless of direction of the stroke
 
+	- real-time stroke smoothing / Path Smoothing Algorithms
+		- mostly use a library or sth for that don't do it manually
+		- https://www.youtube.com/watch?v=ueUgHvUT2Z0
+		- https://willowsystems.github.io/jSignature/%2523%252Fabout%252Flinesmoothing%252F.html
+		- https://github.com/google/ink-stroke-modeler
 
+- GUI
+	1. Header Bar (Reveals on Hover at Top)
+		- **Behavior:**  
+		- Hidden by default in fullscreen.
+		- Slides down or fades in when the mouse hovers near the top edge.
+		- **Contents:**  
+		- App name (center or left)
+		- Open File / Save File buttons
+		- Hamburger menu (for settings/about/quit)
+		- **Implementation:**  
+		- Use `Adw.HeaderBar` and show/hide it based on pointer position (track `enter-notify-event`/`leave-notify-event` or pointer motion at the top).
+
+	2. Help Button (Bottom Right)
+		- **Behavior:**  
+		- A floating `?` button in the bottom right corner.
+		- Clicking it or pressing `?`/`F1` shows a help overlay with all keybindings and controls.
+		- **Implementation:**  
+		- Use a `Gtk.Button` with a `?` icon, positioned with a fixed layout or overlay.
+		- Show a modal or overlay with help text.
+
+	3. Drawing/Normal Mode Toggle
+		- **Drawing Mode:**  
+		- Cursor hidden, drawing enabled, keyboard shortcuts active.
+		- `Esc` switches to Normal Mode.
+		- **Normal Mode:**  
+		- Cursor visible, drawing disabled.
+		- Clicking the drawing area returns to Drawing Mode.
+
+	4. Pen Type Selector
+		- **Display:**  
+		- Show all pen types as small colored circles or icons, with the selected one highlighted.
+		- Place at the bottom left or as a floating horizontal bar near the drawing area.
+		- **Interaction:**  
+		- Clicking a pen icon selects it.
+		- Cycling with `P` still works.
+
+	5. Status Bar (Optional)
+		- **Contents:**  
+		- Current mode (Drawing/Normal), selected pen, and hints.
+		- **Placement:**  
+		- Bottom center or left.
 
 ---
 
-
-
+- (EXTRA) support `capacitive stylus` mode
+	- palm rejection
 
 - reference
 	- https://github.com/Wazzaps/fingerpaint
@@ -37,6 +88,7 @@
 - uses
 	- handwriting signature
 	- doodling / notes
+		- maybe handwriting recognition?
 	- detexify
 		- https://github.com/QuarticCat/detypify 
 	- geometry app
