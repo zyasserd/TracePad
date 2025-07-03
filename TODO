@@ -3,8 +3,8 @@
 	- https://github.com/Taiko2k/GTK4PythonTutorial
 - take control over the pointer
 	- it's really hard to do that in wayland. So, I just decided to go fullscreen and then hide the pointer
-
 - permission escalation
+
 - saving to an image
 	- add the saved images in a gallery on the left
 - different pen types with an indicator
