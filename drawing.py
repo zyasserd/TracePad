@@ -173,15 +173,21 @@ class Stroke:
         self.points.append(point)
         # TODO: add future smoothening, if needed
 
-    def get_new_segments(self):
-        start = self.last_drawn_index
+    def get_segments(self, new_only=False):
+        start = self.last_drawn_index if new_only else 0
         end = len(self.points) - 1
         segments = list(zip(self.points[start:end], self.points[start + 1:end + 1]))
-        self.last_drawn_index = end
-        return segments  # Always Vec2
+
+        if new_only:
+            self.last_drawn_index = end
+        return segments
 
     def reset_drawn(self):
         self.last_drawn_index = 0
+
+    def draw(self, cr, new_only=False):
+        for p1, p2 in self.get_segments(new_only=new_only):
+            self.pen.draw(cr, p1, p2)
 
 class StrokeManager:
     def __init__(self):
@@ -207,12 +213,10 @@ class StrokeManager:
     def get_all_strokes(self):
         return self.completed_strokes + list(self.current_strokes.values())
     
-    def render_strokes_to_surface(self, surface):
+    def draw(self, surface):
         cr = cairo.Context(surface)
         for stroke in self.get_all_strokes():
-            points = stroke.points
-            for p1, p2 in zip(points, points[1:]):
-                stroke.pen.draw(cr, p1, p2)
+            stroke.draw(cr)
 
     def undo(self):
         if self.completed_strokes:
@@ -273,7 +277,7 @@ class MainWindow(Gtk.ApplicationWindow):
             Pen(color=(1, 0, 0), width=2),      # Red pinpoint as normal pen
             Pen(color=(1, 1, 1), width=2),      # White pinpoint as normal pen
             Pen(color=(1, 1, 0, 0.3), width=18),        # Highlighter as normal pen
-            CalligraphyPen(color=(0, 0, 0), width=10, angle=45), # Calligraphy
+            CalligraphyPen(color=(0.1, 0.15, 0.4), width=10, angle=45), # Calligraphy
         ]
         self.pen_index = 0
 
@@ -332,9 +336,7 @@ class MainWindow(Gtk.ApplicationWindow):
             # Draw only the new segment for this stroke directly to the cache surface
             stroke = self.stroke_manager.current_strokes[slot]
             cr = cairo.Context(self.strokes_surface)
-            new_segments = stroke.get_new_segments()
-            for p1, p2 in new_segments:
-                stroke.pen.draw(cr, p1, p2)  # p1, p2 are Vec2
+            stroke.draw(cr, new_only=True)
         
         self.drawing_area.queue_draw()
 
@@ -343,6 +345,7 @@ class MainWindow(Gtk.ApplicationWindow):
         if self.strokes_surface:
             cr.set_source_surface(self.strokes_surface, 0, 0)
             cr.paint()
+        
         # Draw a white rectangular border around the canvas
         cr.set_source_rgb(1, 1, 1)  # White color
         cr.set_line_width(4)        # Border thickness
@@ -375,7 +378,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.strokes_surface = cairo.ImageSurface(
             cairo.FORMAT_ARGB32, int(self.surface_size.x), int(self.surface_size.y)
         )
-        self.stroke_manager.render_strokes_to_surface(self.strokes_surface)
+        self.stroke_manager.draw(self.strokes_surface)
         self.drawing_area.queue_draw()
 
     def undo_last_stroke(self):
@@ -395,18 +398,18 @@ class MainWindow(Gtk.ApplicationWindow):
         width, height = int(self.surface_size.x), int(self.surface_size.y)
         if filetype == "svg":
             surface = cairo.SVGSurface(filename, width, height)
-            self.stroke_manager.render_strokes_to_surface(surface)
+            self.stroke_manager.draw(surface)
             surface.finish()
         elif filetype == "png":
             surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
-            self.stroke_manager.render_strokes_to_surface(surface)
+            self.stroke_manager.draw(surface)
             surface.write_to_png(filename)
         elif filetype == "jpg":
             if Image is None:
                 raise RuntimeError("Pillow (PIL) is required for JPG export.")
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
                 surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
-                self.stroke_manager.render_strokes_to_surface(surface)
+                self.stroke_manager.draw(surface)
                 surface.write_to_png(tmp.name)
                 img = Image.open(tmp.name)
                 rgb_img = img.convert('RGB')
