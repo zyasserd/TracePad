@@ -6,10 +6,12 @@ import os
 import json
 import cairo
 import math  # Global import for math
+import tempfile
+from PIL import Image  # Add to imports
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, Gdk, GLib
+from gi.repository import Gtk, Adw, Gdk, GLib, Gio
 
 
 class Vec2:
@@ -143,6 +145,8 @@ class CalligraphyPen(Pen):
         self.angle_rad = math.radians(angle)
     
     def draw(self, cr, p1, p2):
+        # TODO: Try oval drawing like in the link
+
         perp = Vec2.from_polar_coordinates(self.angle_rad, self.width / 2)
 
         if len(self.color) == 4:
@@ -167,7 +171,7 @@ class Stroke:
 
     def add_point(self, point):
         self.points.append(point)
-        # TODO: add future smoothening
+        # TODO: add future smoothening, if needed
 
     def get_new_segments(self):
         start = self.last_drawn_index
@@ -183,7 +187,7 @@ class StrokeManager:
     def __init__(self):
         self.current_strokes = {}      # slot -> Stroke
         self.completed_strokes = []    # List[Stroke]
-        self.redo_stack = [] # TODO: undo / redo
+        self.redo_stack = []
 
     def start_stroke(self, slot, point, pen):
         stroke = Stroke(pen)
@@ -202,10 +206,32 @@ class StrokeManager:
 
     def get_all_strokes(self):
         return self.completed_strokes + list(self.current_strokes.values())
-
-    def reset_all_drawn(self):
+    
+    def render_strokes_to_surface(self, surface):
+        cr = cairo.Context(surface)
         for stroke in self.get_all_strokes():
-            stroke.reset_drawn()
+            points = stroke.points
+            for p1, p2 in zip(points, points[1:]):
+                stroke.pen.draw(cr, p1, p2)
+
+    def undo(self):
+        if self.completed_strokes:
+            stroke = self.completed_strokes.pop()
+            self.redo_stack.append(stroke)
+            return True
+        return False
+
+    def redo(self):
+        if self.redo_stack:
+            stroke = self.redo_stack.pop()
+            self.completed_strokes.append(stroke)
+            return True
+        return False
+
+    def clear(self):
+        self.completed_strokes.clear()
+        self.current_strokes.clear()
+        self.redo_stack.clear()
 
 class MainWindow(Gtk.ApplicationWindow):
     def __init__(self, *args, **kwargs):
@@ -339,6 +365,108 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.destroy()
         self.touchpad_reader.stop()
         self.get_application().quit()
+    
+    def cycle_pen_type(self):
+        self.pen_index = (self.pen_index + 1) % len(self.pens)
+
+    def rebuild_surface_from_strokes(self):
+        if not self.surface_size:
+            return
+        self.strokes_surface = cairo.ImageSurface(
+            cairo.FORMAT_ARGB32, int(self.surface_size.x), int(self.surface_size.y)
+        )
+        self.stroke_manager.render_strokes_to_surface(self.strokes_surface)
+        self.drawing_area.queue_draw()
+
+    def undo_last_stroke(self):
+        if self.stroke_manager.undo():
+            self.rebuild_surface_from_strokes()
+
+    def redo_last_stroke(self):
+        if self.stroke_manager.redo():
+            self.rebuild_surface_from_strokes()
+
+    def clear_drawing(self):
+        if self.surface_size:
+            self.stroke_manager.clear()
+            self.rebuild_surface_from_strokes()
+
+    def export(self, filename, filetype):
+        width, height = int(self.surface_size.x), int(self.surface_size.y)
+        if filetype == "svg":
+            surface = cairo.SVGSurface(filename, width, height)
+            self.stroke_manager.render_strokes_to_surface(surface)
+            surface.finish()
+        elif filetype == "png":
+            surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
+            self.stroke_manager.render_strokes_to_surface(surface)
+            surface.write_to_png(filename)
+        elif filetype == "jpg":
+            if Image is None:
+                raise RuntimeError("Pillow (PIL) is required for JPG export.")
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
+                self.stroke_manager.render_strokes_to_surface(surface)
+                surface.write_to_png(tmp.name)
+                img = Image.open(tmp.name)
+                rgb_img = img.convert('RGB')
+                rgb_img.save(filename, "JPEG")
+        else:
+            raise ValueError("Unsupported filetype")
+
+    def save_as_dialog(self):
+        self.save_dialog = Gtk.FileDialog.new()
+        self.save_dialog.set_title("Save Drawing")
+
+        # Create filters
+        svg_filter = Gtk.FileFilter()
+        svg_filter.set_name("SVG files")
+        svg_filter.add_mime_type("image/svg+xml")
+        svg_filter.add_pattern("*.svg")
+
+        png_filter = Gtk.FileFilter()
+        png_filter.set_name("PNG files")
+        png_filter.add_mime_type("image/png")
+        png_filter.add_pattern("*.png")
+
+        jpg_filter = Gtk.FileFilter()
+        jpg_filter.set_name("JPEG files")
+        jpg_filter.add_mime_type("image/jpeg")
+        jpg_filter.add_pattern("*.jpg")
+        jpg_filter.add_pattern("*.jpeg")
+
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(svg_filter)
+        filters.append(png_filter)
+        filters.append(jpg_filter)
+
+        self.save_dialog.set_filters(filters)
+        self.save_dialog.set_default_filter(svg_filter)
+
+        # Suggest a default file name
+        self.save_dialog.set_initial_name("drawing.svg")
+
+        # Show the dialog
+        self.save_dialog.save(self, None, self._on_save_dialog_response)
+
+    def _on_save_dialog_response(self, dialog, result):
+        try:
+            file = dialog.save_finish(result)
+            if file is not None:
+                filename = file.get_path()
+                # Determine filetype from extension
+                if filename.lower().endswith(".svg"):
+                    filetype = "svg"
+                elif filename.lower().endswith(".png"):
+                    filetype = "png"
+                elif filename.lower().endswith((".jpg", ".jpeg")):
+                    filetype = "jpg"
+                else:
+                    filetype = "svg"  # Default
+                self.export(filename, filetype)
+        except GLib.Error as error:
+            # TODO: show be a dialog with error
+            print(f"Error saving file: {error.message}")
 
     def on_key(self, controller, keyval, keycode, state):
         if (keyval == Gdk.KEY_z or keyval == Gdk.KEY_Z) and (state & Gdk.ModifierType.CONTROL_MASK):
@@ -349,27 +477,11 @@ class MainWindow(Gtk.ApplicationWindow):
             self.touchpad_reader.stop()
             self.get_application().quit()
         elif keyval == Gdk.KEY_s or keyval == Gdk.KEY_S:
-            self.save_as_svg()
+            self.save_as_dialog()
         elif keyval == Gdk.KEY_p or keyval == Gdk.KEY_P:
             self.cycle_pen_type()
         elif keyval == Gdk.KEY_c or keyval == Gdk.KEY_C:
             self.clear_drawing()
-
-    def undo_last_stroke(self):
-        pass  # Stub for future undo
-
-    def redo_last_stroke(self):
-        pass  # Stub for future redo
-
-    def cycle_pen_type(self):
-        self.pen_index = (self.pen_index + 1) % len(self.pens)
-
-    def clear_drawing(self):
-        # Instead of clearing, just create a new surface
-        if self.surface_size:
-            self.strokes_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, int(self.surface_size.x), int(self.surface_size.y))
-        self.stroke_manager = StrokeManager()
-        self.drawing_area.queue_draw()
 
 class MyApp(Adw.Application):
     def __init__(self):
