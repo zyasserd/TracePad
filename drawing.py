@@ -135,7 +135,7 @@ class Pen:
         cr.set_source_rgba(*self.color)
         
         cr.set_line_width(self.width)
-        cr.set_line_cap(cairo.LINE_CAP_ROUND) # TODO: highlighter
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
         cr.move_to(*points[0])
         for pt in points[1:]:
             cr.line_to(*pt)
@@ -179,6 +179,20 @@ class CalligraphyPen(Pen):
         cr.rotate(self.angle_rad)
         cr.scale(1.5, 0.5)
         super().draw_cursor(cr, (0, 0))
+
+
+class PointerPen(Pen):
+    def __init__(self, color=(0, 1, 0, 1), width=16):
+        super().__init__(color, width, supports_incremental_drawing=True)
+
+    def draw(self, cr, points):
+        # Do not draw anything on the canvas
+        pass
+
+    def draw_cursor(self, cr, point):
+        cr.set_source_rgba(*self.color)
+        cr.arc(*point, self.width / 2, 0, 2 * math.pi)
+        cr.fill()
 
 class Stroke:
     def __init__(self, pen):
@@ -299,6 +313,8 @@ class MainWindow(Gtk.ApplicationWindow):
             Pen(color=(1, 1, 0, 0.3), width=18, supports_incremental_drawing=False),
             # Calligraphy
             CalligraphyPen(color=(0.1, 0.15, 0.4, 1), width=10, angle=45),
+            # Pointer pen
+            PointerPen(color=(0, 1, 0, 1), width=16),
         ]
         self.pen_index = 0
 
@@ -387,7 +403,7 @@ class MainWindow(Gtk.ApplicationWindow):
             secondary_text=message
         )
         dialog.connect("response", self._on_error_dialog_response)
-        dialog.show()
+        dialog.present()
 
     def _on_error_dialog_response(self, dialog, response):
         dialog.destroy()
