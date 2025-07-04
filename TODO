@@ -1,84 +1,51 @@
-- why is the mouse still responding when saving
+- read the code and understand it properly
+- see lots of gtk code examples
 
-- does undo/redo work if there is a current stroke
-- how to handle the current strokes
+- Header Bar (Reveals on Hover at Top)
+	- Open File
+	- Save File buttons
+	- Hamburger menu (for settings/about/quit)
+		- include shortcuts on the right of each item
+		- shortcut menu
+			- redesign
 
-- saving
+- mode indicator bottom banner
+	- make it looks more like LibAdwaita
+		- check a status bar or sth
+	
+- Pen Type Selector
+	- make vertical maybe
+	- then display it nicely, like a stroke or sth
+
+- save dialog
+	- TODOS
+		- you can not use filters to pick the file type when saving
+
 	- increase quality of raster photos
 	- jpg background color
-	- transfor svg to png/jpg instead of losing quality
+	- convert svg to png/jpg instead of losing quality
+
+	- add ctrl+s for saving
+
+- browse notes?
+	- open file
 
 ---
 
-- [x] UI & Framework
-	- use GTK4 + libadwaita
-		- Libadwaita
-		- https://github.com/Taiko2k/GTK4PythonTutorial
-
-	- take control over the pointer
+- Notes
+	- taking control over the pointer
 		- it's really hard to do that in wayland. So, I just decided to go fullscreen and then hide the pointer
 
-	- permission escalation
 
-- Drawing
-	- different pen types with an indicator
-		- transparent highlighter
-			- draw current strokes direct
-		- a pointer that doesn't write
-		- signature pen
-
-
-- review code
-
-- GUI
-	1. Header Bar (Reveals on Hover at Top)
-		- **Behavior:**  
-		- Hidden by default in fullscreen.
-		- Slides down or fades in when the mouse hovers near the top edge.
-		- **Contents:**  
-		- App name (center or left)
-		- Open File / Save File buttons
-		- Hamburger menu (for settings/about/quit)
-		- **Implementation:**  
-		- Use `Adw.HeaderBar` and show/hide it based on pointer position (track `enter-notify-event`/`leave-notify-event` or pointer motion at the top).
-
-	2. Help Button (Bottom Right)
-		- **Behavior:**  
-		- A floating `?` button in the bottom right corner.
-		- Clicking it or pressing `?`/`F1` shows a help overlay with all keybindings and controls.
-		- **Implementation:**  
-		- Use a `Gtk.Button` with a `?` icon, positioned with a fixed layout or overlay.
-		- Show a modal or overlay with help text.
-
-	3. Drawing/Normal Mode Toggle
-		- **Drawing Mode:**  
-		- Cursor hidden, drawing enabled, keyboard shortcuts active.
-		- `Esc` switches to Normal Mode.
-		- **Normal Mode:**  
-		- Cursor visible, drawing disabled.
-		- Clicking the drawing area returns to Drawing Mode.
-
-	4. Pen Type Selector
-		- **Display:**  
-		- Show all pen types as small colored circles or icons, with the selected one highlighted.
-		- Place at the bottom left or as a floating horizontal bar near the drawing area.
-		- **Interaction:**  
-		- Clicking a pen icon selects it.
-		- Cycling with `P` still works.
-
-	5. Status Bar (Optional)
-		- **Contents:**  
-		- Current mode (Drawing/Normal), selected pen, and hints.
-		- **Placement:**  
-		- Bottom center or left.
-
----
+- (BUG) highlighter rendering issue when lingering
+	- too many points causes it to jitter
 
 - (EXTRA) real-time stroke smoothing / Path Smoothing Algorithms
 	- is it needed
 	- mostly use a library or sth for that don't do it manually
 	- https://www.youtube.com/watch?v=ueUgHvUT2Z0
 	- https://willowsystems.github.io/jSignature/%2523%252Fabout%252Flinesmoothing%252F.html
+		- TODO: design the oval pen?
 	- https://github.com/google/ink-stroke-modeler
 
 - (EXTRA) support `capacitive stylus` mode
@@ -88,6 +55,10 @@
 	- https://github.com/Wazzaps/fingerpaint
 	- apps created by python and nix
 		- https://github.com/knoopx/vibeapps/blob/main/apps/launcher/launcher.py
+	- use GTK4 + libadwaita
+		- Libadwaita
+		- https://github.com/Taiko2k/GTK4PythonTutorial
+
 
 - uses
 	- handwriting signature

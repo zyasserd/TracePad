@@ -96,7 +96,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.frame.set_child(self.drawing_area)
         self.frame.set_halign(Gtk.Align.CENTER)
         self.frame.set_valign(Gtk.Align.CENTER)
-        self.frame.set_css_classes(["drawing-frame"])
+        self.frame.set_css_classes(["drawing-frame"])  # Default class
         self.overlay.set_child(self.frame)
 
         # [[ STROKE MANAGER ]]
@@ -104,12 +104,22 @@ class MainWindow(Gtk.ApplicationWindow):
         self.strokes_surface = None
         self.surface_size = None
 
-        # [[ MODES ]]
+        # [[ BOTTOM BANNER (Adw.Banner) ]]
+        self.bottom_banner = Adw.Banner()
+        self.bottom_banner.set_halign(Gtk.Align.CENTER)
+        self.bottom_banner.set_valign(Gtk.Align.END)
+        self.bottom_banner.set_revealed(True)
+        self.bottom_banner.set_margin_bottom(32)
+        self.bottom_banner.set_css_classes(["big-banner-radius"])
+        self.overlay.add_overlay(self.bottom_banner)
+
         self.set_drawing_mode(True)
+
 
         # Connect hamburger menu actions
         app = self.get_application()
         app.add_action(self.create_shortcuts_action())
+
 
     def create_shortcuts_action(self):
         action = Gio.SimpleAction.new("shortcuts", None)
@@ -131,7 +141,6 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.set_title("Keyboard Shortcuts")
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=24, margin_bottom=24, margin_start=24, margin_end=24)
         label = Gtk.Label(label=help_text)
-        label.set_use_markup(True)
         label.set_justify(Gtk.Justification.LEFT)
         box.append(label)
         # Add custom close button at the bottom
@@ -150,8 +159,16 @@ class MainWindow(Gtk.ApplicationWindow):
         self.drawing_mode = drawing
         if drawing:
             self.set_cursor(Gdk.Cursor.new_from_name("none"))
+            self.frame.remove_css_class("drawing-frame-inactive")
+            self.frame.add_css_class("drawing-frame-active")
+            self.bottom_banner.set_title("🖱️ Mouse captured! Press Esc to exit.")
         else:
             self.set_cursor(Gdk.Cursor.new_from_name("default"))
+            self.frame.remove_css_class("drawing-frame-active")
+            self.frame.add_css_class("drawing-frame-inactive")
+            self.bottom_banner.set_title("Click anywhere on the pad to start drawing ✏️")
+
+        self.drawing_area.queue_draw()
 
     def update_pen_selector(self):
         # Remove old children (GTK4: use get_first_child and remove in a loop)
@@ -272,6 +289,12 @@ class MainWindow(Gtk.ApplicationWindow):
         # Draw pointers
         for stroke in self.stroke_manager.current_strokes.values():
             stroke.pen.draw_cursor(cr, stroke.points[-1])
+        
+        # Glassy blur/dim effect when not in drawing mode
+        if not self.drawing_mode:
+            cr.set_source_rgba(0, 0, 0, 0.55)
+            cr.rectangle(0, 0, width, height)
+            cr.fill()
 
     def handle_touchpad_error(self, message: str) -> None:
         dialog = Gtk.MessageDialog(
@@ -414,6 +437,9 @@ class MainWindow(Gtk.ApplicationWindow):
             self.clear_drawing()
         elif keyval == Gdk.KEY_F1 or keyval == Gdk.KEY_question:
             self.show_shortcuts_dialog(None, None)
+        elif keyval in {Gdk.KEY_1 + i for i in range(len(self.pens))}:
+            self.pen_index = keyval - Gdk.KEY_1
+            self.update_pen_selector()
 
 
 class MyApp(Adw.Application):
@@ -428,8 +454,19 @@ class MyApp(Adw.Application):
         # CSS for frame border
         css = b'''
         .drawing-frame {
-            /* border: 4px solid #00aaff; */
-            border-radius: 0px;
+            border-radius: 24px;
+            border: 4px solid #888;
+            background: #222;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .drawing-frame-active {
+            border-color: #00aaff;
+            box-shadow: 0 0 16px 2px #00aaff44;
+        }
+        .drawing-frame-inactive {
+            border-color: #888;
+            box-shadow: none;
+            opacity: 0.85;
         }
         '''
         provider = Gtk.CssProvider()
