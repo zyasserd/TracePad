@@ -127,15 +127,20 @@ class Pen:
         self.color = color
         self.width = width
 
-    def draw(self, cr, p1, p2):
+    def draw(self, cr, points):
+        if len(points) < 2:
+            return
+        
         if len(self.color) == 4:
             cr.set_source_rgba(*self.color)
         else:
             cr.set_source_rgb(*self.color)
+        
         cr.set_line_width(self.width)
-        cr.set_line_cap(cairo.LINE_CAP_ROUND) # TODO: should it be customizable / different for highlight
-        cr.move_to(*p1)
-        cr.line_to(*p2)
+        cr.set_line_cap(cairo.LINE_CAP_ROUND) # TODO: highlighter
+        cr.move_to(*points[0])
+        for pt in points[1:]:
+            cr.line_to(*pt)
         cr.stroke()
 
 class CalligraphyPen(Pen):
@@ -143,25 +148,31 @@ class CalligraphyPen(Pen):
         super().__init__(color, width)
         self.angle = angle
         self.angle_rad = math.radians(angle)
-    
-    def draw(self, cr, p1, p2):
-        # TODO: Try oval drawing like in the link
 
-        perp = Vec2.from_polar_coordinates(self.angle_rad, self.width / 2)
-
+    def draw(self, cr: cairo.Context, points):
+        if len(points) < 2:
+            return
+        
         if len(self.color) == 4:
             cr.set_source_rgba(*self.color)
         else:
             cr.set_source_rgb(*self.color)
         
+        perp = Vec2.from_polar_coordinates(self.angle_rad, self.width / 2)
+
         cr.set_line_width(1)
-        # Four corners of the quadrilateral
-        cr.move_to(*(p1 - perp))
-        cr.line_to(*(p2 - perp))
-        cr.line_to(*(p2 + perp))
-        cr.line_to(*(p1 + perp))
-        cr.close_path()
-        cr.fill()
+        for i in range(len(points) - 1):
+            p1 = points[i]
+            p2 = points[i + 1]
+
+            # Four corners of the quadrilateral
+            cr.move_to(*(p1 - perp))
+            cr.line_to(*(p2 - perp))
+            cr.line_to(*(p2 + perp))
+            cr.line_to(*(p1 + perp))
+            cr.close_path()
+            cr.fill_preserve()
+            cr.stroke()
 
 class Stroke:
     def __init__(self, pen):
@@ -173,21 +184,14 @@ class Stroke:
         self.points.append(point)
         # TODO: add future smoothening, if needed
 
-    def get_segments(self, new_only=False):
+    def draw(self, cr, new_only=False):
         start = self.last_drawn_index if new_only else 0
-        end = len(self.points) - 1
-        segments = list(zip(self.points[start:end], self.points[start + 1:end + 1]))
+        points = self.points[start:]
+
+        self.pen.draw(cr, points)
 
         if new_only:
-            self.last_drawn_index = end
-        return segments
-
-    def reset_drawn(self):
-        self.last_drawn_index = 0
-
-    def draw(self, cr, new_only=False):
-        for p1, p2 in self.get_segments(new_only=new_only):
-            self.pen.draw(cr, p1, p2)
+            self.last_drawn_index = len(self.points) - 1
 
 class StrokeManager:
     def __init__(self):
@@ -277,9 +281,10 @@ class MainWindow(Gtk.ApplicationWindow):
             Pen(color=(1, 0, 0), width=2),      # Red pinpoint as normal pen
             Pen(color=(1, 1, 1), width=2),      # White pinpoint as normal pen
             Pen(color=(1, 1, 0, 0.3), width=18),        # Highlighter as normal pen
-            CalligraphyPen(color=(0.1, 0.15, 0.4), width=10, angle=45), # Calligraphy
+            # CalligraphyPen(color=(0.1, 0.15, 0.4), width=10, angle=45), # Calligraphy
+            CalligraphyPen(color=(1,1,1), width=10, angle=45), # Calligraphy
         ]
-        self.pen_index = 0
+        self.pen_index = 3
 
 
     def handle_device_info(self):
@@ -320,8 +325,12 @@ class MainWindow(Gtk.ApplicationWindow):
         new_slots = set(data.keys())
 
         # End strokes for slots that disappeared
-        for slot in current_slots - new_slots:
-            self.stroke_manager.end_stroke(slot)
+        ended = current_slots - new_slots
+        if ended:
+            for slot in ended:
+                self.stroke_manager.end_stroke(slot)
+            # Redraw cache surface only once after all ended strokes
+            self.rebuild_surface_from_strokes()
         
         # Start or update strokes for active slots
         for slot, pos in data.items():
@@ -332,19 +341,18 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.stroke_manager.start_stroke(slot, draw_point, pen)
             else:
                 self.stroke_manager.update_stroke(slot, draw_point)
-            
-            # Draw only the new segment for this stroke directly to the cache surface
-            stroke = self.stroke_manager.current_strokes[slot]
-            cr = cairo.Context(self.strokes_surface)
-            stroke.draw(cr, new_only=True)
         
         self.drawing_area.queue_draw()
 
     def on_draw(self, area, cr, width, height):
-        # Just paint the cached surface
+        # Paint the cached surface (completed strokes)
         if self.strokes_surface:
             cr.set_source_surface(self.strokes_surface, 0, 0)
             cr.paint()
+        
+        # Draw current (in-progress) strokes on top
+        for stroke in self.stroke_manager.current_strokes.values():
+            stroke.draw(cr)
         
         # Draw a white rectangular border around the canvas
         cr.set_source_rgb(1, 1, 1)  # White color
