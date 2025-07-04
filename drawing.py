@@ -123,9 +123,10 @@ class TouchpadReaderThread:
         return self.max
 
 class Pen:
-    def __init__(self, color=(0, 0, 0), width=2):
+    def __init__(self, color=(0, 0, 0), width=2, supports_incremental_drawing=True):
         self.color = color
         self.width = width
+        self.supports_incremental_drawing = supports_incremental_drawing
 
     def draw(self, cr, points):
         if len(points) < 2:
@@ -145,7 +146,7 @@ class Pen:
 
 class CalligraphyPen(Pen):
     def __init__(self, color=(0, 0, 0), width=10, angle=45):
-        super().__init__(color, width)
+        super().__init__(color, width, supports_incremental_drawing=True)
         self.angle = angle
         self.angle_rad = math.radians(angle)
 
@@ -278,11 +279,14 @@ class MainWindow(Gtk.ApplicationWindow):
 
         # [[ PENS ]]
         self.pens = [
-            Pen(color=(1, 0, 0), width=2),      # Red pinpoint as normal pen
-            Pen(color=(1, 1, 1), width=2),      # White pinpoint as normal pen
-            Pen(color=(1, 1, 0, 0.3), width=18),        # Highlighter as normal pen
-            # CalligraphyPen(color=(0.1, 0.15, 0.4), width=10, angle=45), # Calligraphy
-            CalligraphyPen(color=(1,1,1), width=10, angle=45), # Calligraphy
+            # Red pinpoint as normal pen
+            Pen(color=(1, 0, 0), width=2),
+            # White pinpoint as normal pen
+            Pen(color=(1, 1, 1), width=2),
+            # Highlighter as normal pen
+            Pen(color=(1, 1, 0, 0.3), width=18, supports_incremental_drawing=False),
+            # Calligraphy
+            CalligraphyPen(color=(0.1, 0.15, 0.4), width=10, angle=45),
         ]
         self.pen_index = 3
 
@@ -341,6 +345,12 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.stroke_manager.start_stroke(slot, draw_point, pen)
             else:
                 self.stroke_manager.update_stroke(slot, draw_point)
+
+            # Draw incrementally for Strokes that support that
+            stroke : Stroke = self.stroke_manager.current_strokes[slot]
+            if stroke.pen.supports_incremental_drawing:
+                cr = cairo.Context(self.strokes_surface)
+                stroke.draw(cr, True)
         
         self.drawing_area.queue_draw()
 
@@ -352,7 +362,8 @@ class MainWindow(Gtk.ApplicationWindow):
         
         # Draw current (in-progress) strokes on top
         for stroke in self.stroke_manager.current_strokes.values():
-            stroke.draw(cr)
+            if not stroke.pen.supports_incremental_drawing:
+                stroke.draw(cr)
         
         # Draw a white rectangular border around the canvas
         cr.set_source_rgb(1, 1, 1)  # White color
