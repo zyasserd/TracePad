@@ -5,21 +5,62 @@ import sys
 import os
 import json
 import cairo
+import math  # Global import for math
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gdk, GLib
 
 
+class Vec2:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __iter__(self):
+        return iter((self.x, self.y))
+
+    def __repr__(self):
+        return f"Vec2(x={self.x}, y={self.y})"
+    
+    def __eq__(self, other):
+        return isinstance(other, Vec2) and self.x == other.x and self.y == other.y
+    
+    def __add__(self, other):
+        return Vec2(self.x + other.x, self.y + other.y)
+    
+    def __sub__(self, other):
+        return Vec2(self.x - other.x, self.y - other.y)
+    
+    def __mul__(self, scalar):
+        return Vec2(self.x * scalar, self.y * scalar)
+    
+    def transform_to_space(self, from_space, to_space):
+        """
+        Transform this Vec2 from one coordinate space to another.
+        from_space: Vec2 (source max_x, max_y)
+        to_space: Vec2 (target width, height)
+        """
+        return Vec2(self.x * to_space.x / from_space.x, self.y * to_space.y / from_space.y)
+    
+    @property
+    def aspect(self):
+        """Return the aspect ratio x/y (width/height)."""
+        return self.x / self.y if self.y != 0 else float('inf')
+    
+    @staticmethod
+    def from_polar_coordinates(angle_rad, radius):
+        """Create a Vec2 from an angle in radians and a radius (length)."""
+        return Vec2(math.cos(angle_rad) * radius, math.sin(angle_rad) * radius)
+
 class TouchpadReaderThread:
     def __init__(self, on_device_info, on_event, on_error):
-        self.on_device_info = on_device_info  # callback for device info
-        self.on_event = on_event  # callback for normal events
-        self.on_error = on_error  # callback for errors
+        self.on_device_info = on_device_info
+        self.on_event = on_event
+        self.on_error = on_error
         self.reader_process = None
         self.reader_thread = None
-        self.max_x = None
-        self.max_y = None
+        self.max = None  # Vec2(max_x, max_y)
         self._should_stop = threading.Event()
 
     def start(self):
@@ -56,12 +97,11 @@ class TouchpadReaderThread:
                 break
             elif event.get('event') == 'device_info':
                 data = event.get('data', {})
-                self.max_x = data.get('max_x')
-                self.max_y = data.get('max_y')
+                self.max = Vec2(data.get('max_x'), data.get('max_y'))
                 if self.on_device_info:
                     GLib.idle_add(self.on_device_info)
             elif event.get('event') == 'touch_update':
-                GLib.idle_add(self.on_event, event)
+                GLib.idle_add(self.on_event, event['data'])
             
             # ignore shutdown event type
 
@@ -78,7 +118,94 @@ class TouchpadReaderThread:
 
     @property
     def dimensions(self):
-        return self.max_x, self.max_y
+        return self.max
+
+class Pen:
+    def __init__(self, color=(0, 0, 0), width=2):
+        self.color = color
+        self.width = width
+
+    def draw(self, cr, p1, p2):
+        if len(self.color) == 4:
+            cr.set_source_rgba(*self.color)
+        else:
+            cr.set_source_rgb(*self.color)
+        cr.set_line_width(self.width)
+        cr.set_line_cap(cairo.LINE_CAP_ROUND) # TODO: should it be customizable / different for highlight
+        cr.move_to(*p1)
+        cr.line_to(*p2)
+        cr.stroke()
+
+class CalligraphyPen(Pen):
+    def __init__(self, color=(0, 0, 0), width=10, angle=45):
+        super().__init__(color, width)
+        self.angle = angle
+        self.angle_rad = math.radians(angle)
+    
+    def draw(self, cr, p1, p2):
+        perp = Vec2.from_polar_coordinates(self.angle_rad, self.width / 2)
+
+        if len(self.color) == 4:
+            cr.set_source_rgba(*self.color)
+        else:
+            cr.set_source_rgb(*self.color)
+        
+        cr.set_line_width(1)
+        # Four corners of the quadrilateral
+        cr.move_to(*(p1 - perp))
+        cr.line_to(*(p2 - perp))
+        cr.line_to(*(p2 + perp))
+        cr.line_to(*(p1 + perp))
+        cr.close_path()
+        cr.fill()
+
+class Stroke:
+    def __init__(self, pen):
+        self.points = []
+        self.last_drawn_index = 0
+        self.pen = pen
+
+    def add_point(self, point):
+        self.points.append(point)
+        # TODO: add future smoothening
+
+    def get_new_segments(self):
+        start = self.last_drawn_index
+        end = len(self.points) - 1
+        segments = list(zip(self.points[start:end], self.points[start + 1:end + 1]))
+        self.last_drawn_index = end
+        return segments  # Always Vec2
+
+    def reset_drawn(self):
+        self.last_drawn_index = 0
+
+class StrokeManager:
+    def __init__(self):
+        self.current_strokes = {}      # slot -> Stroke
+        self.completed_strokes = []    # List[Stroke]
+        self.redo_stack = [] # TODO: undo / redo
+
+    def start_stroke(self, slot, point, pen):
+        stroke = Stroke(pen)
+        stroke.add_point(point)
+        self.current_strokes[slot] = stroke
+
+    def update_stroke(self, slot, point):
+        if slot in self.current_strokes:
+            self.current_strokes[slot].add_point(point)
+
+    def end_stroke(self, slot):
+        if slot in self.current_strokes:
+            self.completed_strokes.append(self.current_strokes[slot])
+            del self.current_strokes[slot]
+            self.redo_stack.clear()
+
+    def get_all_strokes(self):
+        return self.completed_strokes + list(self.current_strokes.values())
+
+    def reset_all_drawn(self):
+        for stroke in self.get_all_strokes():
+            stroke.reset_drawn()
 
 class MainWindow(Gtk.ApplicationWindow):
     def __init__(self, *args, **kwargs):
@@ -107,182 +234,94 @@ class MainWindow(Gtk.ApplicationWindow):
         # [[ DRAWING AREA ]]
         self.coverage = 0.6
         self.drawing_area = Gtk.DrawingArea()
-        self.drawing_area.set_draw_func(self.on_draw)
-        self.finger_positions = {}
-        # Store paths as: slot -> list of segments, each segment is dict with 'points' and 'pen_type'
-        self.paths = {}  # slot: [ {'points': [(x, y), ...], 'pen_type': ...}, ... ]
-        self.active_segments = {}  # slot: current segment being drawn
-        self.current_pen_type_idx = 0
-        self.default_pen_types = [
-            {'name': 'red', 'color': (1, 0, 0, 0.8), 'thickness': 4},
-            {'name': 'green', 'color': (0, 1, 0, 0.8), 'thickness': 4},
-            {'name': 'blue', 'color': (0, 0, 1, 0.8), 'thickness': 4},
-            {'name': 'black', 'color': (0, 0, 0, 0.8), 'thickness': 8},
-            {'name': 'highlighter', 'color': (1, 1, 0, 0.3), 'thickness': 18},
-        ]
-        self.current_pen_type = self.default_pen_types[self.current_pen_type_idx]
-        # For performance: cache the drawing as a cairo.ImageSurface
-        self._drawing_cache = None
-        self._drawing_cache_valid = False
 
-        self.undo_stack = []  # Stack for undo
-        self.redo_stack = []  # Stack for redo
+        # [[ STOKE MANAGER ]]
+        self.stroke_manager = StrokeManager()
+
+        # [[ CACHE SURFACE ]]
+        self.strokes_surface = None  # The cache surface
+        self.surface_size = None  # Vec2(width, height)
+
+        # [[ PENS ]]
+        self.pens = [
+            Pen(color=(1, 0, 0), width=2),      # Red pinpoint as normal pen
+            Pen(color=(1, 1, 1), width=2),      # White pinpoint as normal pen
+            Pen(color=(1, 1, 0, 0.3), width=18),        # Highlighter as normal pen
+            CalligraphyPen(color=(0, 0, 0), width=10, angle=45), # Calligraphy
+        ]
+        self.pen_index = 0
+
 
     def handle_device_info(self):
         # Get window size (fullscreen, so only set once)
-        win_width = self.get_size(orientation=Gtk.Orientation.HORIZONTAL)
-        win_height = self.get_size(orientation=Gtk.Orientation.VERTICAL)
+        win_size = Vec2(
+            self.get_size(orientation=Gtk.Orientation.HORIZONTAL),
+            self.get_size(orientation=Gtk.Orientation.VERTICAL)
+        )
 
         # Calculate aspect ratio
-        aspect = self.touchpad_reader.max_x / self.touchpad_reader.max_y
+        aspect = self.touchpad_reader.max.aspect
+
         # Calculate drawing area size based on coverage
-        if win_width / win_height > aspect:
+        if win_size.x / win_size.y > aspect:
             # Window is wider than touchpad
-            height = int(win_height * self.coverage)
+            height = int(win_size.y * self.coverage)
             width = int(height * aspect)
         else:
-            width = int(win_width * self.coverage)
+            width = int(win_size.x * self.coverage)
             height = int(width / aspect)
         self.drawing_area.set_size_request(width, height)
+
         # Center the drawing area
         self.drawing_area.set_halign(Gtk.Align.CENTER)
         self.drawing_area.set_valign(Gtk.Align.CENTER)
 
         # show only after the resize
+        self.drawing_area.set_draw_func(self.on_draw)
         self.set_child(self.drawing_area)
 
-    def handle_touchpad_event(self, event):
-        prev_slots = set(self.finger_positions.keys())
-        self.finger_positions = event.get('data', {})
-        new_slots = set(self.finger_positions.keys())
-        # For each slot, if new, start a new segment with current pen type
-        for slot in new_slots:
-            info = self.finger_positions[slot]
-            x = info.get('x', 0)
-            y = info.get('y', 0)
-            if slot not in self.active_segments:
-                # New touch: start new segment
-                seg = {'points': [(x, y)], 'pen_type': self.current_pen_type.copy()}
-                self.active_segments[slot] = seg
+        # Create the cache surface
+        self.strokes_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
+        self.surface_size = Vec2(width, height)
+
+    def handle_touchpad_event(self, data):
+        # data: {slot: {x, y}}
+        current_slots = set(self.stroke_manager.current_strokes.keys())
+        new_slots = set(data.keys())
+
+        # End strokes for slots that disappeared
+        for slot in current_slots - new_slots:
+            self.stroke_manager.end_stroke(slot)
+        
+        # Start or update strokes for active slots
+        for slot, pos in data.items():
+            abs_point = Vec2(pos['x'], pos['y'])
+            draw_point = abs_point.transform_to_space(self.touchpad_reader.max, self.surface_size)
+            if slot not in self.stroke_manager.current_strokes:
+                pen = self.pens[self.pen_index]
+                self.stroke_manager.start_stroke(slot, draw_point, pen)
             else:
-                self.active_segments[slot]['points'].append((x, y))
-        # For slots that disappeared, commit their segment to paths
-        for slot in prev_slots - new_slots:
-            if slot in self.active_segments:
-                if slot not in self.paths:
-                    self.paths[slot] = []
-                # Save state for undo before committing
-                self.undo_stack.append((self._copy_paths(), self._copy_active_segments()))
-                self.redo_stack.clear()
-                self.paths[slot].append(self.active_segments[slot])
-                del self.active_segments[slot]
-                self._drawing_cache_valid = False  # New stroke, need redraw
-        # If any new points were added to active segments, mark cache invalid
-        if new_slots:
-            self._drawing_cache_valid = False
+                self.stroke_manager.update_stroke(slot, draw_point)
+            
+            # Draw only the new segment for this stroke directly to the cache surface
+            stroke = self.stroke_manager.current_strokes[slot]
+            cr = cairo.Context(self.strokes_surface)
+            new_segments = stroke.get_new_segments()
+            for p1, p2 in new_segments:
+                stroke.pen.draw(cr, p1, p2)  # p1, p2 are Vec2
+        
         self.drawing_area.queue_draw()
 
-    def cycle_pen_type(self):
-        self.current_pen_type_idx = (self.current_pen_type_idx + 1) % len(self.default_pen_types)
-        self.current_pen_type = self.default_pen_types[self.current_pen_type_idx].copy()
-
-    def draw_all(self, cr, width, height, draw_background=False, draw_fingers=True):
-        # Optionally fill background (for SVG)
-        if draw_background:
-            cr.save()
-            cr.set_source_rgb(1, 1, 1)
-            cr.rectangle(0, 0, width, height)
-            cr.fill()
-            cr.restore()
-        # Draw border
-        cr.set_source_rgba(1, 0, 0, 1)
-        cr.set_line_width(2)
-        cr.rectangle(1, 1, width-2, height-2)
-        cr.stroke()
-        max_x = self.touchpad_reader.max_x
-        max_y = self.touchpad_reader.max_y
-        # Draw cached finished paths
-        for slot, segments in self.paths.items():
-            for seg in segments:
-                pts = seg['points']
-                pen = seg['pen_type']
-                if len(pts) < 2:
-                    continue
-                cr.set_source_rgba(*pen['color'])
-                cr.set_line_width(pen['thickness'])
-                for i, (x, y) in enumerate(pts):
-                    sx = x / max_x * width
-                    sy = y / max_y * height
-                    if i == 0:
-                        cr.move_to(sx, sy)
-                    else:
-                        cr.line_to(sx, sy)
-                cr.stroke()
-        # Draw active segments (not yet committed)
-        for slot, seg in self.active_segments.items():
-            pts = seg['points']
-            pen = seg['pen_type']
-            if len(pts) < 2:
-                continue
-            cr.set_source_rgba(*pen['color'])
-            cr.set_line_width(pen['thickness'])
-            for i, (x, y) in enumerate(pts):
-                sx = x / max_x * width
-                sy = y / max_y * height
-                if i == 0:
-                    cr.move_to(sx, sy)
-                else:
-                    cr.line_to(sx, sy)
-            cr.stroke()
-        # Draw current finger positions as circles
-        if draw_fingers:
-            for i, (slot, info) in enumerate(self.finger_positions.items()):
-                x = info.get('x', 0)
-                y = info.get('y', 0)
-                draw_x = x / max_x * width
-                draw_y = y / max_y * height
-                pen = self.current_pen_type
-                cr.set_source_rgba(*pen['color'])
-                cr.arc(draw_x, draw_y, 15, 0, 2*3.1416)
-                cr.fill()
-
-    def _update_drawing_cache(self):
-        width = self.drawing_area.get_size(orientation=Gtk.Orientation.HORIZONTAL)
-        height = self.drawing_area.get_size(orientation=Gtk.Orientation.VERTICAL)
-        if width <= 0 or height <= 0:
-            return
-        self._drawing_cache = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
-        cr = cairo.Context(self._drawing_cache)
-        self.draw_all(cr, width, height, draw_background=False, draw_fingers=False)
-        self._drawing_cache_valid = True
-
     def on_draw(self, area, cr, width, height):
-        # Only redraw finished paths if cache is invalid
-        if not self._drawing_cache_valid or self._drawing_cache is None:
-            self._update_drawing_cache()
-        if self._drawing_cache:
-            cr.set_source_surface(self._drawing_cache, 0, 0)
+        # Just paint the cached surface
+        if self.strokes_surface:
+            cr.set_source_surface(self.strokes_surface, 0, 0)
             cr.paint()
-        # Draw active segments and fingers live (not cached)
-        self.draw_all(cr, width, height, draw_background=False, draw_fingers=True)
-
-    def save_as_svg(self):
-        # Save the current drawing as SVG
-        dialog = Gtk.FileDialog.new()
-        dialog.set_title("Save as SVG")
-        def on_response(dialog, result):
-            file = dialog.save_finish(result)
-            if file:
-                path = file.get_path()
-                self._export_svg(path)
-        dialog.save(self, None, on_response)
-
-    def _export_svg(self, path):
-        width = self.drawing_area.get_allocated_width()
-        height = self.drawing_area.get_allocated_height()
-        with cairo.SVGSurface(path, width, height) as surface:
-            cr = cairo.Context(surface)
-            self.draw_all(cr, width, height, draw_background=True, draw_fingers=False)
+        # Draw a white rectangular border around the canvas
+        cr.set_source_rgb(1, 1, 1)  # White color
+        cr.set_line_width(4)        # Border thickness
+        cr.rectangle(2, 2, width - 2, height - 2)
+        cr.stroke()
 
     def handle_touchpad_error(self, message):
         dialog = Gtk.MessageDialog(
@@ -301,46 +340,6 @@ class MainWindow(Gtk.ApplicationWindow):
         self.touchpad_reader.stop()
         self.get_application().quit()
 
-    def clear_drawing(self):
-        # Push current state to undo stack before clearing
-        self.undo_stack.append((self._copy_paths(), self._copy_active_segments()))
-        self.redo_stack.clear()
-        self.paths.clear()
-        self.active_segments.clear()
-        self._drawing_cache = None
-        self._drawing_cache_valid = False
-        self.drawing_area.queue_draw()
-
-    def undo_last_stroke(self):
-        # Save current state to redo stack
-        if self.paths or self.active_segments:
-            self.redo_stack.append((self._copy_paths(), self._copy_active_segments()))
-        if self.undo_stack:
-            prev_paths, prev_active = self.undo_stack.pop()
-            self.paths = prev_paths
-            self.active_segments = {}  # Always clear active segments after undo
-            self._drawing_cache_valid = False
-            self.drawing_area.queue_draw()
-
-    def redo_last_stroke(self):
-        if self.redo_stack:
-            # Save current state to undo stack
-            self.undo_stack.append((self._copy_paths(), self._copy_active_segments()))
-            next_paths, next_active = self.redo_stack.pop()
-            self.paths = next_paths
-            self.active_segments = {}  # Always clear active segments after redo
-            self._drawing_cache_valid = False
-            self.drawing_area.queue_draw()
-
-    def _copy_paths(self):
-        # Deep copy paths for undo/redo
-        import copy
-        return copy.deepcopy(self.paths)
-
-    def _copy_active_segments(self):
-        import copy
-        return copy.deepcopy(self.active_segments)
-
     def on_key(self, controller, keyval, keycode, state):
         if (keyval == Gdk.KEY_z or keyval == Gdk.KEY_Z) and (state & Gdk.ModifierType.CONTROL_MASK):
             self.undo_last_stroke()
@@ -355,6 +354,22 @@ class MainWindow(Gtk.ApplicationWindow):
             self.cycle_pen_type()
         elif keyval == Gdk.KEY_c or keyval == Gdk.KEY_C:
             self.clear_drawing()
+
+    def undo_last_stroke(self):
+        pass  # Stub for future undo
+
+    def redo_last_stroke(self):
+        pass  # Stub for future redo
+
+    def cycle_pen_type(self):
+        self.pen_index = (self.pen_index + 1) % len(self.pens)
+
+    def clear_drawing(self):
+        # Instead of clearing, just create a new surface
+        if self.surface_size:
+            self.strokes_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, int(self.surface_size.x), int(self.surface_size.y))
+        self.stroke_manager = StrokeManager()
+        self.drawing_area.queue_draw()
 
 class MyApp(Adw.Application):
     def __init__(self):
