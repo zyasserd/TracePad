@@ -267,8 +267,15 @@ class MainWindow(Gtk.ApplicationWindow):
         
 
         # [[ DRAWING AREA ]]
-        self.coverage = 0.6
+        self.coverage = 0.65
         self.drawing_area = Gtk.DrawingArea()
+
+        # [[ FRAME AROUND DRAWING AREA ]]
+        self.frame = Gtk.Frame()
+        self.frame.set_child(self.drawing_area)
+        self.frame.set_halign(Gtk.Align.CENTER)
+        self.frame.set_valign(Gtk.Align.CENTER)
+        self.frame.set_css_classes(["drawing-frame"])
 
         # [[ STOKE MANAGER ]]
         self.stroke_manager = StrokeManager()
@@ -288,7 +295,7 @@ class MainWindow(Gtk.ApplicationWindow):
             # Calligraphy
             CalligraphyPen(color=(0.1, 0.15, 0.4), width=10, angle=45),
         ]
-        self.pen_index = 3
+        self.pen_index = 0
 
 
     def handle_device_info(self):
@@ -311,13 +318,9 @@ class MainWindow(Gtk.ApplicationWindow):
             height = int(width / aspect)
         self.drawing_area.set_size_request(width, height)
 
-        # Center the drawing area
-        self.drawing_area.set_halign(Gtk.Align.CENTER)
-        self.drawing_area.set_valign(Gtk.Align.CENTER)
-
         # show only after the resize
         self.drawing_area.set_draw_func(self.on_draw)
-        self.set_child(self.drawing_area)
+        self.set_child(self.frame)
 
         # Create the cache surface
         self.strokes_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
@@ -365,12 +368,6 @@ class MainWindow(Gtk.ApplicationWindow):
             if not stroke.pen.supports_incremental_drawing:
                 stroke.draw(cr)
         
-        # Draw a white rectangular border around the canvas
-        cr.set_source_rgb(1, 1, 1)  # White color
-        cr.set_line_width(4)        # Border thickness
-        cr.rectangle(2, 2, width - 2, height - 2)
-        cr.stroke()
-
     def handle_touchpad_error(self, message):
         dialog = Gtk.MessageDialog(
             transient_for=self,
@@ -515,6 +512,21 @@ class MyApp(Adw.Application):
     def on_activate(self, app):
         self.win = MainWindow(application=app)
         self.win.present()
+
+        # CSS for frame border
+        css = b'''
+        .drawing-frame {
+            /* border: 4px solid #00aaff; */
+            border-radius: 0px;
+        }
+        '''
+        provider = Gtk.CssProvider()
+        provider.load_from_data(css)
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(),
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
 
 app = MyApp()
 app.run()
