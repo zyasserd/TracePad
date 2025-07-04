@@ -123,7 +123,7 @@ class TouchpadReaderThread:
         return self.max
 
 class Pen:
-    def __init__(self, color=(0, 0, 0), width=2, supports_incremental_drawing=True):
+    def __init__(self, color=(0, 0, 0, 1), width=2, supports_incremental_drawing=True):
         self.color = color
         self.width = width
         self.supports_incremental_drawing = supports_incremental_drawing
@@ -132,10 +132,7 @@ class Pen:
         if len(points) < 2:
             return
         
-        if len(self.color) == 4:
-            cr.set_source_rgba(*self.color)
-        else:
-            cr.set_source_rgb(*self.color)
+        cr.set_source_rgba(*self.color)
         
         cr.set_line_width(self.width)
         cr.set_line_cap(cairo.LINE_CAP_ROUND) # TODO: highlighter
@@ -144,8 +141,14 @@ class Pen:
             cr.line_to(*pt)
         cr.stroke()
 
+    def draw_cursor(self, cr, point):
+        cr.set_source_rgba(*self.color)
+        cursor_radius = max(5, (self.width/2) * 1.25)  # Make the cursor clearly larger than the pen
+        cr.arc(*point, cursor_radius, 0, 2 * math.pi)
+        cr.fill()
+    
 class CalligraphyPen(Pen):
-    def __init__(self, color=(0, 0, 0), width=10, angle=45):
+    def __init__(self, color=(0, 0, 0, 1), width=10, angle=45):
         super().__init__(color, width, supports_incremental_drawing=True)
         self.angle = angle
         self.angle_rad = math.radians(angle)
@@ -154,13 +157,9 @@ class CalligraphyPen(Pen):
         if len(points) < 2:
             return
         
-        if len(self.color) == 4:
-            cr.set_source_rgba(*self.color)
-        else:
-            cr.set_source_rgb(*self.color)
-        
         perp = Vec2.from_polar_coordinates(self.angle_rad, self.width / 2)
 
+        cr.set_source_rgba(*self.color)
         cr.set_line_width(1)
         for i in range(len(points) - 1):
             p1 = points[i]
@@ -174,6 +173,12 @@ class CalligraphyPen(Pen):
             cr.close_path()
             cr.fill_preserve()
             cr.stroke()
+
+    def draw_cursor(self, cr, point):
+        cr.translate(*point)
+        cr.rotate(self.angle_rad)
+        cr.scale(1.5, 0.5)
+        super().draw_cursor(cr, (0, 0))
 
 class Stroke:
     def __init__(self, pen):
@@ -287,13 +292,13 @@ class MainWindow(Gtk.ApplicationWindow):
         # [[ PENS ]]
         self.pens = [
             # Red pinpoint as normal pen
-            Pen(color=(1, 0, 0), width=2),
+            Pen(color=(1, 0, 0, 1), width=2),
             # White pinpoint as normal pen
-            Pen(color=(1, 1, 1), width=2),
+            Pen(color=(1, 1, 1, 1), width=2),
             # Highlighter as normal pen
             Pen(color=(1, 1, 0, 0.3), width=18, supports_incremental_drawing=False),
             # Calligraphy
-            CalligraphyPen(color=(0.1, 0.15, 0.4), width=10, angle=45),
+            CalligraphyPen(color=(0.1, 0.15, 0.4, 1), width=10, angle=45),
         ]
         self.pen_index = 0
 
@@ -368,6 +373,10 @@ class MainWindow(Gtk.ApplicationWindow):
             if not stroke.pen.supports_incremental_drawing:
                 stroke.draw(cr)
         
+        # Draw pointers
+        for stroke in self.stroke_manager.current_strokes.values():
+            stroke.pen.draw_cursor(cr, stroke.points[-1])
+
     def handle_touchpad_error(self, message):
         dialog = Gtk.MessageDialog(
             transient_for=self,
