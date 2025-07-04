@@ -453,6 +453,7 @@ class MainWindow(Gtk.ApplicationWindow):
         try:
             file = dialog.save_finish(result)
             if file is not None:
+                # TODO: do it with the filters
                 filename = file.get_path()
                 # Determine filetype from extension
                 if filename.lower().endswith(".svg"):
@@ -466,6 +467,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.export(filename, filetype)
         except GLib.Error as error:
             # TODO: show be a dialog with error
+            # NOTE: dismissed by used is an error
             print(f"Error saving file: {error.message}")
 
     def on_key(self, controller, keyval, keycode, state):

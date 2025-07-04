@@ -1,3 +1,15 @@
+- why is the mouse still responding when saving
+
+- does undo/redo work if there is a current stroke
+- how to handle the current strokes
+
+- saving
+	- increase quality of raster photos
+	- jpg background color
+	- transfor svg to png/jpg instead of losing quality
+
+---
+
 - [x] UI & Framework
 	- use GTK4 + libadwaita
 		- Libadwaita
@@ -8,30 +20,15 @@
 
 	- permission escalation
 
-- [ ] Refactoring
-	- understand the code
-	- understand how to cache and store strokes and points
-	- understand undo / redo
-	- improve drawing speed and responsivity
-		- don't draw from scratch everytime
-	- BUG dots don't draw
-
 - Drawing
-	- saving to an image
-		- svg / png / jpg
-			- convert from svg to png or jpg
-		- add the saved images in a gallery on the left
-
 	- different pen types with an indicator
 		- transparent highlighter
+			- draw current strokes direct
 		- a pointer that doesn't write
-		- asymmetric brush is an oval slanted diagonally and locked in that slant regardless of direction of the stroke
+		- signature pen
 
-	- real-time stroke smoothing / Path Smoothing Algorithms
-		- mostly use a library or sth for that don't do it manually
-		- https://www.youtube.com/watch?v=ueUgHvUT2Z0
-		- https://willowsystems.github.io/jSignature/%2523%252Fabout%252Flinesmoothing%252F.html
-		- https://github.com/google/ink-stroke-modeler
+
+- review code
 
 - GUI
 	1. Header Bar (Reveals on Hover at Top)
@@ -76,6 +73,13 @@
 		- Bottom center or left.
 
 ---
+
+- (EXTRA) real-time stroke smoothing / Path Smoothing Algorithms
+	- is it needed
+	- mostly use a library or sth for that don't do it manually
+	- https://www.youtube.com/watch?v=ueUgHvUT2Z0
+	- https://willowsystems.github.io/jSignature/%2523%252Fabout%252Flinesmoothing%252F.html
+	- https://github.com/google/ink-stroke-modeler
 
 - (EXTRA) support `capacitive stylus` mode
 	- palm rejection
