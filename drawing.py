@@ -57,8 +57,8 @@ class Vec2:
         return Vec2(math.cos(angle_rad) * radius, math.sin(angle_rad) * radius)
 
 class TouchpadReaderThread:
-    def __init__(self, on_device_info: Callable[[], None], on_event: Callable[[Any], None], on_error: Callable[[str], None]) -> None:
-        self.on_device_info = on_device_info
+    def __init__(self, on_device_init: Callable[[], None], on_event: Callable[[Any], None], on_error: Callable[[str], None]) -> None:
+        self.on_device_init = on_device_init
         self.on_event = on_event
         self.on_error = on_error
         self.reader_process = None
@@ -101,8 +101,8 @@ class TouchpadReaderThread:
             elif event.get('event') == 'device_info':
                 data = event.get('data', {})
                 self.max = Vec2(data.get('max_x'), data.get('max_y'))
-                if self.on_device_info:
-                    GLib.idle_add(self.on_device_info)
+                if self.on_device_init:
+                    GLib.idle_add(self.on_device_init)
             elif event.get('event') == 'touch_update':
                 GLib.idle_add(self.on_event, event['data'])
             
@@ -274,7 +274,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
         # [[ TOUCHPAD THREAD ]]
         self.touchpad_reader = TouchpadReaderThread(
-            self.handle_device_info,
+            self.handle_device_init,
             self.handle_touchpad_event,
             self.handle_touchpad_error
         )
@@ -321,7 +321,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.pen_index = 0
 
 
-    def handle_device_info(self) -> None:
+    def handle_device_init(self) -> None:
         # Get window size (fullscreen, so only set once)
         win_size = Vec2(
             self.get_size(orientation=Gtk.Orientation.HORIZONTAL),
