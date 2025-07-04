@@ -15,10 +15,59 @@ class MainWindow(Gtk.ApplicationWindow):
         super().__init__(*args, **kwargs)
         self.fullscreen()
 
-        # [[ CURSOR ]]
-        self.set_cursor(Gdk.Cursor.new_from_name("none"))
+        # [[ OVERLAY ]]
+        self.overlay = Gtk.Overlay()
+        self.set_child(self.overlay)
 
+        # [[ HEADER BAR (Always Visible) ]]
+        self.header_bar = Gtk.HeaderBar()
+        self.header_bar.set_title_widget(Gtk.Label(label="Absolute Touchpad"))
+        self.header_bar.set_show_title_buttons(False)
+        # Open/Save buttons
+        open_btn = Gtk.Button(icon_name="document-open")
+        open_btn.connect("clicked", self.on_open_clicked)
+        save_btn = Gtk.Button(icon_name="document-save")
+        save_btn.connect("clicked", self.on_save_clicked)
+        self.header_bar.pack_start(open_btn)
+        self.header_bar.pack_start(save_btn)
+        # Custom close button (top right)
+        close_btn = Gtk.Button(icon_name="window-close-symbolic")
+        close_btn.set_tooltip_text("Close")
+        close_btn.connect("clicked", lambda btn: self.get_application().quit())
+        self.header_bar.pack_end(close_btn)
+        # Hamburger menu
+        menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
+        menu = Gio.Menu()
+        menu.append("Keyboard Shortcuts", "app.shortcuts")
+        menu.append("Settings", "app.settings")
+        menu.append("About", "app.about")
+        menu.append("Quit", "app.quit")
+        menu_btn.set_menu_model(menu)
+        self.header_bar.pack_end(menu_btn)
 
+        self.overlay.add_overlay(self.header_bar)
+        self.header_bar.set_halign(Gtk.Align.FILL)
+        self.header_bar.set_valign(Gtk.Align.START)
+
+        # [[ PEN SELECTOR (Bottom Left) ]]
+        self.pen_selector_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.pen_selector_box.set_halign(Gtk.Align.START)
+        self.pen_selector_box.set_valign(Gtk.Align.END)
+        self.pen_selector_box.set_margin_start(24)
+        self.pen_selector_box.set_margin_bottom(24)
+        self.overlay.add_overlay(self.pen_selector_box)
+
+        # [[ PENS ]]
+        self.pens = [
+            Pen(color=(1, 0, 0, 1), width=2),
+            Pen(color=(1, 1, 1, 1), width=2),
+            Pen(color=(1, 1, 0, 0.3), width=18, supports_incremental_drawing=False),
+            CalligraphyPen(color=(0.1, 0.15, 0.4, 1), width=10, angle=45),
+            PointerPen(color=(0, 1, 0, 1), width=16),
+        ]
+        self.pen_index = 0
+        self.update_pen_selector()
+        
         # [[ TOUCHPAD THREAD ]]
         self.touchpad_reader = TouchpadReaderThread(
             self.handle_device_init,
@@ -27,16 +76,20 @@ class MainWindow(Gtk.ApplicationWindow):
         )
         self.touchpad_reader.start()
 
-
         # [[ KEYBINDINGS ]]
         key_controller = Gtk.EventControllerKey.new()
         key_controller.connect("key-pressed", self.on_key)
         self.add_controller(key_controller)
         
-
         # [[ DRAWING AREA ]]
         self.coverage = 0.65
         self.drawing_area = Gtk.DrawingArea()
+        # Remove make_drawing_area_controller, use click gesture inline
+        click_controller = Gtk.GestureClick.new()
+        click_controller.connect("pressed", self.on_drawing_area_click)
+        self.drawing_area.add_controller(click_controller)
+        self.drawing_area.set_can_focus(True)
+        self.drawing_area.set_focus_on_click(True)
 
         # [[ FRAME AROUND DRAWING AREA ]]
         self.frame = Gtk.Frame()
@@ -44,29 +97,104 @@ class MainWindow(Gtk.ApplicationWindow):
         self.frame.set_halign(Gtk.Align.CENTER)
         self.frame.set_valign(Gtk.Align.CENTER)
         self.frame.set_css_classes(["drawing-frame"])
+        self.overlay.set_child(self.frame)
 
-        # [[ STOKE MANAGER ]]
+        # [[ STROKE MANAGER ]]
         self.stroke_manager = StrokeManager()
+        self.strokes_surface = None
+        self.surface_size = None
 
-        # [[ CACHE SURFACE ]]
-        self.strokes_surface = None  # The cache surface
-        self.surface_size = None  # Vec2(width, height)
+        # [[ MODES ]]
+        self.set_drawing_mode(True)
 
-        # [[ PENS ]]
-        self.pens = [
-            # Red pinpoint as normal pen
-            Pen(color=(1, 0, 0, 1), width=2),
-            # White pinpoint as normal pen
-            Pen(color=(1, 1, 1, 1), width=2),
-            # Highlighter as normal pen
-            Pen(color=(1, 1, 0, 0.3), width=18, supports_incremental_drawing=False),
-            # Calligraphy
-            CalligraphyPen(color=(0.1, 0.15, 0.4, 1), width=10, angle=45),
-            # Pointer pen
-            PointerPen(color=(0, 1, 0, 1), width=16),
-        ]
-        self.pen_index = 0
+        # Connect hamburger menu actions
+        app = self.get_application()
+        app.add_action(self.create_shortcuts_action())
 
+    def create_shortcuts_action(self):
+        action = Gio.SimpleAction.new("shortcuts", None)
+        action.connect("activate", self.show_shortcuts_dialog)
+        return action
+
+    def show_shortcuts_dialog(self, action, param):
+        help_text = (
+            "<b>Keybindings &amp; Controls</b>\n\n"
+            "• <b>P</b>: Cycle pen\n"
+            "• <b>Click pen icon</b>: Select pen\n"
+            "• <b>Ctrl+Z/Y</b>: Undo/Redo\n"
+            "• <b>S</b>: Save\n"
+            "• <b>Esc</b>: Normal mode\n"
+            "• <b>Click drawing area</b>: Drawing mode\n"
+            "• <b>Q</b>: Quit\n"
+        )
+        dialog = Gtk.Dialog(transient_for=self, modal=True)
+        dialog.set_title("Keyboard Shortcuts")
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=24, margin_bottom=24, margin_start=24, margin_end=24)
+        label = Gtk.Label(label=help_text)
+        label.set_use_markup(True)
+        label.set_justify(Gtk.Justification.LEFT)
+        box.append(label)
+        # Add custom close button at the bottom
+        close_btn = Gtk.Button(label="Close")
+        close_btn.set_halign(Gtk.Align.END)
+        close_btn.connect("clicked", lambda btn: dialog.close())
+        box.append(close_btn)
+        dialog.set_child(box)
+        dialog.present()
+
+    def on_drawing_area_click(self, controller, n_press, x, y):
+        if not self.drawing_mode:
+            self.set_drawing_mode(True)
+
+    def set_drawing_mode(self, drawing: bool):
+        self.drawing_mode = drawing
+        if drawing:
+            self.set_cursor(Gdk.Cursor.new_from_name("none"))
+        else:
+            self.set_cursor(Gdk.Cursor.new_from_name("default"))
+
+    def update_pen_selector(self):
+        # Remove old children (GTK4: use get_first_child and remove in a loop)
+        child = self.pen_selector_box.get_first_child()
+        while child:
+            next_child = child.get_next_sibling()
+            self.pen_selector_box.remove(child)
+            child = next_child
+        # Add pen buttons
+        for i, pen in enumerate(self.pens):
+            btn = Gtk.Button()
+            btn.set_size_request(32, 32)
+            btn.set_tooltip_text(f"Pen {i+1}")
+            btn.connect("clicked", self.on_pen_selected, i)
+            # Draw color circle
+            drawing = Gtk.DrawingArea()
+            def draw_circle(area, cr, w, h, color=pen.color, selected=(i==self.pen_index)):
+                cr.set_source_rgba(*color)
+                cr.arc(w/2, h/2, min(w, h)/2-4, 0, 2*3.1416)
+                cr.fill_preserve()
+                if selected:
+                    cr.set_source_rgba(0, 0.7, 1, 1)
+                    cr.set_line_width(3)
+                    cr.stroke()
+                else:
+                    cr.set_source_rgba(0,0,0,0.2)
+                    cr.set_line_width(1)
+                    cr.stroke()
+            drawing.set_draw_func(draw_circle)
+            btn.set_child(drawing)
+            self.pen_selector_box.append(btn)
+
+    def on_pen_selected(self, btn, idx):
+        self.pen_index = idx
+        self.update_pen_selector()
+
+    def on_open_clicked(self, btn):
+        # TODO: implement open
+        pass
+
+    def on_save_clicked(self, btn):
+        self.set_drawing_mode(False)  # Switch to normal mode when saving
+        self.save_as_dialog()
 
     def handle_device_init(self) -> None:
         # Get window size (fullscreen, so only set once)
@@ -90,13 +218,16 @@ class MainWindow(Gtk.ApplicationWindow):
 
         # show only after the resize
         self.drawing_area.set_draw_func(self.on_draw)
-        self.set_child(self.frame)
+        # self.set_child(self.frame)  # REMOVE this line, overlay is always the window child
 
         # Create the cache surface
         self.strokes_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
         self.surface_size = Vec2(width, height)
 
     def handle_touchpad_event(self, data) -> None:
+        if not self.drawing_mode:
+            return
+        
         # data: {slot: {x, y}}
         current_slots = set(self.stroke_manager.current_strokes.keys())
         new_slots = set(data.keys())
@@ -161,6 +292,7 @@ class MainWindow(Gtk.ApplicationWindow):
     
     def cycle_pen_type(self) -> None:
         self.pen_index = (self.pen_index + 1) % len(self.pens)
+        self.update_pen_selector()
 
     def rebuild_surface_from_strokes(self) -> None:
         if not self.surface_size:
@@ -268,15 +400,21 @@ class MainWindow(Gtk.ApplicationWindow):
             self.undo_last_stroke()
         elif (keyval == Gdk.KEY_y or keyval == Gdk.KEY_Y) and (state & Gdk.ModifierType.CONTROL_MASK):
             self.redo_last_stroke()
-        elif keyval == Gdk.KEY_Escape or keyval == Gdk.KEY_q or keyval == Gdk.KEY_Q:
+        elif keyval == Gdk.KEY_Escape:
+            self.set_drawing_mode(False)
+        elif keyval == Gdk.KEY_q or keyval == Gdk.KEY_Q:
             self.touchpad_reader.stop()
             self.get_application().quit()
         elif keyval == Gdk.KEY_s or keyval == Gdk.KEY_S:
+            self.set_drawing_mode(False)
             self.save_as_dialog()
         elif keyval == Gdk.KEY_p or keyval == Gdk.KEY_P:
             self.cycle_pen_type()
         elif keyval == Gdk.KEY_c or keyval == Gdk.KEY_C:
             self.clear_drawing()
+        elif keyval == Gdk.KEY_F1 or keyval == Gdk.KEY_question:
+            self.show_shortcuts_dialog(None, None)
+
 
 class MyApp(Adw.Application):
     def __init__(self) -> None:
