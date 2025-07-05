@@ -21,12 +21,9 @@ class MainWindow(Gtk.ApplicationWindow):
         self.header_bar = Gtk.HeaderBar()
         self.header_bar.set_title_widget(Gtk.Label(label="Absolute Touchpad"))
         self.header_bar.set_show_title_buttons(False)
-        # Open/Save buttons
-        open_btn = Gtk.Button(icon_name="document-open")
-        open_btn.connect("clicked", self.on_open_clicked)
-        save_btn = Gtk.Button(icon_name="document-save")
+        # Only Save button (top left, with text)
+        save_btn = Gtk.Button(label="Save")  # Removed icon_name=None to avoid Gtk-CRITICAL
         save_btn.connect("clicked", self.on_save_clicked)
-        self.header_bar.pack_start(open_btn)
         self.header_bar.pack_start(save_btn)
         # Custom close button (top right)
         close_btn = Gtk.Button(icon_name="window-close-symbolic")
@@ -36,10 +33,9 @@ class MainWindow(Gtk.ApplicationWindow):
         # Hamburger menu
         menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
         menu = Gio.Menu()
+        menu.append("Preferences", "app.preferences")
         menu.append("Keyboard Shortcuts", "app.shortcuts")
-        menu.append("Settings", "app.settings")
         menu.append("About", "app.about")
-        menu.append("Quit", "app.quit")
         menu_btn.set_menu_model(menu)
         self.header_bar.pack_end(menu_btn)
 
@@ -140,43 +136,28 @@ class MainWindow(Gtk.ApplicationWindow):
         self.strokes_surface = None
         self.surface_size = None
 
-        self.set_drawing_mode(True)
+        self.set_drawing_mode(False)
 
 
         # Connect hamburger menu actions
         app = self.get_application()
         app.add_action(self.create_shortcuts_action())
+        # Add About and Preferences actions
+        about_action = Gio.SimpleAction.new("about", None)
+        about_action.connect("activate", self.show_about_dialog)
+        app.add_action(about_action)
+        shortcuts_action = Gio.SimpleAction.new("shortcuts", None)
+        shortcuts_action.connect("activate", self.show_shortcuts_window)
+        app.add_action(shortcuts_action)
+        preferences_action = Gio.SimpleAction.new("preferences", None)
+        preferences_action.connect("activate", lambda a, p: None)  # Placeholder
+        app.add_action(preferences_action)
 
 
     def create_shortcuts_action(self):
         action = Gio.SimpleAction.new("shortcuts", None)
-        action.connect("activate", self.show_shortcuts_dialog)
+        action.connect("activate", self.show_shortcuts_window)
         return action
-
-    def show_shortcuts_dialog(self, action, param):
-        help_text = (
-            "<b>Keybindings &amp; Controls</b>\n\n"
-            "• <b>P</b>: Cycle pen\n"
-            "• <b>Click pen icon</b>: Select pen\n"
-            "• <b>Ctrl+Z/Y</b>: Undo/Redo\n"
-            "• <b>S</b>: Save\n"
-            "• <b>Esc</b>: Normal mode\n"
-            "• <b>Click drawing area</b>: Drawing mode\n"
-            "• <b>Q</b>: Quit\n"
-        )
-        dialog = Gtk.Dialog(transient_for=self, modal=True)
-        dialog.set_title("Keyboard Shortcuts")
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=24, margin_bottom=24, margin_start=24, margin_end=24)
-        label = Gtk.Label(label=help_text)
-        label.set_justify(Gtk.Justification.LEFT)
-        box.append(label)
-        # Add custom close button at the bottom
-        close_btn = Gtk.Button(label="Close")
-        close_btn.set_halign(Gtk.Align.END)
-        close_btn.connect("clicked", lambda btn: dialog.close())
-        box.append(close_btn)
-        dialog.set_child(box)
-        dialog.present()
 
     def on_drawing_area_click(self, controller, n_press, x, y):
         if not self.drawing_mode:
@@ -427,7 +408,7 @@ class MainWindow(Gtk.ApplicationWindow):
             # Switch pens: 'p' or number keys
             case (_, 'p', _):
                 self.cycle_pen_type()
-            case (_, _, k) if Gdk.KEY_1 <= k < Gdk.KEY_1 + len(self.pens):
+            case (_, _, k) if Gdk.KEY_1 <= k < Gdk.KEY_1 + max(len(self.pens), 9):
                 self.pen_index = k - Gdk.KEY_1
                 self.update_pen_selector()
             # Clear
@@ -435,10 +416,55 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.clear_drawing()
             # Help
             case (_, _, Gdk.KEY_F1) | (_, _, Gdk.KEY_question):
-                self.show_shortcuts_dialog(None, None)
+                self.show_shortcuts_window(None, None)
             case _:
                 pass
 
+    def show_about_dialog(self, action=None, param=None):
+        about = Adw.AboutDialog(
+            application_name="Absolute Touchpad",
+            version="1.0.0",
+            developer_name="Your Name",
+            copyright="© 2025 Your Name",
+            website="https://github.com/your-repo",
+            issue_url="https://github.com/your-repo/issues",
+            comments="A fullscreen drawing app for touchpads."
+        )
+        about.present()
+
+    def show_shortcuts_window(self, action=None, param=None):
+        shortcuts = Gtk.ShortcutsWindow()
+
+        section = Gtk.ShortcutsSection(section_name="shortcuts")
+
+        # General group
+        group_general = Gtk.ShortcutsGroup(title="General")
+        group_general.add_shortcut(Gtk.ShortcutsShortcut(title="Normal mode", accelerator="Escape"))
+        group_general.add_shortcut(Gtk.ShortcutsShortcut(title="Shortcuts", accelerator="F1 question"))
+        group_general.add_shortcut(Gtk.ShortcutsShortcut(title="Quit", accelerator="Q"))
+        section.add_group(group_general)
+
+        # File group
+        group_file = Gtk.ShortcutsGroup(title="File")
+        group_file.add_shortcut(Gtk.ShortcutsShortcut(title="Save", accelerator="<Ctrl>S"))
+        section.add_group(group_file)
+
+        # Pens group
+        group_pens = Gtk.ShortcutsGroup(title="Pens")
+        group_pens.add_shortcut(Gtk.ShortcutsShortcut(title="Cycle pen", accelerator="P"))
+        group_pens.add_shortcut(Gtk.ShortcutsShortcut(title="Select pen", accelerator="1+2..."))
+        section.add_group(group_pens)
+
+        # Editing group
+        group_edit = Gtk.ShortcutsGroup(title="Editing")
+        group_edit.add_shortcut(Gtk.ShortcutsShortcut(title="Undo", accelerator="<Ctrl>Z"))
+        group_edit.add_shortcut(Gtk.ShortcutsShortcut(title="Redo", accelerator="<Ctrl>Y"))
+        group_edit.add_shortcut(Gtk.ShortcutsShortcut(title="Clear drawing", accelerator="C"))
+        section.add_group(group_edit)
+
+        shortcuts.add_section(section)
+        shortcuts.present()
+        
 
 class MyApp(Adw.Application):
     def __init__(self) -> None:
