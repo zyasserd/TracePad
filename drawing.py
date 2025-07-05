@@ -17,19 +17,28 @@ class MainWindow(Gtk.ApplicationWindow):
         self.overlay = Gtk.Overlay()
         self.set_child(self.overlay)
 
+
         # [[ HEADER BAR (Always Visible) ]]
-        self.header_bar = Gtk.HeaderBar()
-        self.header_bar.set_title_widget(Gtk.Label(label="Absolute Touchpad"))
-        self.header_bar.set_show_title_buttons(False)
+        self.header_bar = Gtk.HeaderBar(
+            title_widget=Gtk.Label(label="Absolute Touchpad"),
+            show_title_buttons=False,
+            halign=Gtk.Align.FILL,
+            valign=Gtk.Align.START
+        )
+
         # Only Save button (top left, with text)
         save_btn = Gtk.Button(label="Save")  # Removed icon_name=None to avoid Gtk-CRITICAL
         save_btn.connect("clicked", self.on_save_clicked)
         self.header_bar.pack_start(save_btn)
+
         # Custom close button (top right)
-        close_btn = Gtk.Button(icon_name="window-close-symbolic")
-        close_btn.set_tooltip_text("Close")
-        close_btn.connect("clicked", lambda btn: self.get_application().quit())
+        close_btn = Gtk.Button(
+            icon_name="window-close-symbolic",
+            tooltip_text="Quit"
+        )
+        close_btn.connect("clicked", lambda _: self.get_application().quit())
         self.header_bar.pack_end(close_btn)
+
         # Hamburger menu
         menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
         menu = Gio.Menu()
@@ -39,33 +48,35 @@ class MainWindow(Gtk.ApplicationWindow):
         menu_btn.set_menu_model(menu)
         self.header_bar.pack_end(menu_btn)
 
-        # self.overlay.add_overlay(self.header_bar)
-        self.header_bar.set_halign(Gtk.Align.FILL)
-        self.header_bar.set_valign(Gtk.Align.START)
+        # Connect hamburger menu actions
+        def _add_menu_action(name, callback):
+            action = Gio.SimpleAction.new(name, None)
+            action.connect("activate", callback)
+            self.get_application().add_action(action)
+        _add_menu_action("about", self.show_about_dialog)
+        _add_menu_action("shortcuts", self.show_shortcuts_window)
+        _add_menu_action("preferences", lambda a, p: None)  # Placeholder
 
-        # [[ TOP OVERLAY: Banner below header bar ]]
-        self.top_overlay_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.top_overlay_box.set_halign(Gtk.Align.FILL)
-        self.top_overlay_box.set_valign(Gtk.Align.START)
-        self.top_overlay_box.set_margin_top(0)
-        self.top_overlay_box.set_margin_bottom(0)
-        self.top_overlay_box.set_margin_start(0)
-        self.top_overlay_box.set_margin_end(0)
-        # Add header bar and banner to the top overlay box
-        # (header bar is already overlaid, so only add banner here)
 
-        # [[ BOTTOM BANNER (Adw.Banner) -- now at top after header bar ]]
-        self.bottom_banner = Adw.Banner()
-        self.bottom_banner.set_halign(Gtk.Align.FILL)
-        self.bottom_banner.set_valign(Gtk.Align.END)
-        self.bottom_banner.set_revealed(True)
-        self.bottom_banner.set_margin_bottom(0)
-        self.bottom_banner.set_margin_top(0)
-        self.bottom_banner.set_css_classes(["big-banner-radius"])
+        # [[ TOP OVERLAY: header_bar + banner ]]
+        self.top_overlay_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            valign=Gtk.Align.START
+        )
+
+
+        # [[ TOP BANNER ]]
+        self.banner = Adw.Banner(
+            halign=Gtk.Align.FILL,
+            valign=Gtk.Align.END,
+            revealed=True,
+            css_classes=["big-banner-radius"]
+        )
 
         self.top_overlay_box.append(self.header_bar)
-        self.top_overlay_box.append(self.bottom_banner)
+        self.top_overlay_box.append(self.banner)
         self.overlay.add_overlay(self.top_overlay_box)
+
 
         # [[ PENS ]]
         self.pens = [
@@ -78,18 +89,25 @@ class MainWindow(Gtk.ApplicationWindow):
         ]
         self.pen_index = 0
 
+
         # [[ PEN SELECTOR (Bottom Left) ]]
-        self.pen_selector_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        self.pen_selector_box.set_halign(Gtk.Align.START)
-        self.pen_selector_box.set_valign(Gtk.Align.END)
-        self.pen_selector_box.set_margin_start(24)
-        self.pen_selector_box.set_margin_bottom(24)
+        self.pen_selector_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            halign=Gtk.Align.START,
+            valign=Gtk.Align.END,
+            margin_start=24,
+            margin_bottom=24,
+            spacing=8,
+        )
         self.overlay.add_overlay(self.pen_selector_box)
+        # TODO: add it to a diff function, cuz we will need to update later
         for i, pen in enumerate(self.pens):
-            btn = Gtk.Button()
-            btn.set_size_request(48, 48)
-            btn.set_css_classes(["pen"])
-            btn.set_tooltip_text(f"({i+1}) {pen.name}")
+            btn = Gtk.Button(
+                width_request=48,
+                height_request=48,
+                css_classes=["pen"],
+                tooltip_text=f"({i+1}) {pen.name}",
+            )
             btn.connect("clicked", self.on_pen_selected, i)
 
             # Draw selector icon
@@ -100,6 +118,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.pen_selector_box.append(btn)
         self.update_pen_selector()
 
+
         # [[ TOUCHPAD THREAD ]]
         self.touchpad_reader = TouchpadReaderThread(
             self.handle_device_init,
@@ -108,99 +127,74 @@ class MainWindow(Gtk.ApplicationWindow):
         )
         self.touchpad_reader.start()
 
+
         # [[ KEYBINDINGS ]]
         key_controller = Gtk.EventControllerKey.new()
         key_controller.connect("key-pressed", self.on_key)
         self.add_controller(key_controller)
-        
+
+
         # [[ DRAWING AREA ]]
         self.coverage = 0.65
-        self.drawing_area = Gtk.DrawingArea()
+        self.drawing_area = Gtk.DrawingArea(
+            can_focus=True,
+            focus_on_click=True
+        )
         # Remove make_drawing_area_controller, use click gesture inline
         click_controller = Gtk.GestureClick.new()
-        click_controller.connect("pressed", self.on_drawing_area_click)
+        def on_drawing_area_click(controller, n_press, x, y):
+            self.set_drawing_mode(True)
+        click_controller.connect("pressed", on_drawing_area_click)
         self.drawing_area.add_controller(click_controller)
-        self.drawing_area.set_can_focus(True)
-        self.drawing_area.set_focus_on_click(True)
+
 
         # [[ FRAME AROUND DRAWING AREA ]]
-        self.frame = Gtk.Frame()
+        self.frame = Gtk.Frame(
+            halign=Gtk.Align.CENTER,
+            valign=Gtk.Align.CENTER,
+            css_classes=["drawing-frame"]
+        )
         self.frame.set_child(self.drawing_area)
-        self.frame.set_halign(Gtk.Align.CENTER)
-        self.frame.set_valign(Gtk.Align.CENTER)
-        self.frame.set_css_classes(["drawing-frame"])  # Default class
         self.overlay.set_child(self.frame)
+
+
+        # [[ DRAWING MODE ]]
+        self.drawing_mode = False
+        self.set_drawing_mode(self.drawing_mode)
+
 
         # [[ STROKE MANAGER ]]
         self.stroke_manager = StrokeManager()
         self.strokes_surface = None
         self.surface_size = None
 
-        self.set_drawing_mode(False)
-
-
-        # Connect hamburger menu actions
-        app = self.get_application()
-        app.add_action(self.create_shortcuts_action())
-        # Add About and Preferences actions
-        about_action = Gio.SimpleAction.new("about", None)
-        about_action.connect("activate", self.show_about_dialog)
-        app.add_action(about_action)
-        shortcuts_action = Gio.SimpleAction.new("shortcuts", None)
-        shortcuts_action.connect("activate", self.show_shortcuts_window)
-        app.add_action(shortcuts_action)
-        preferences_action = Gio.SimpleAction.new("preferences", None)
-        preferences_action.connect("activate", lambda a, p: None)  # Placeholder
-        app.add_action(preferences_action)
-
-
-    def create_shortcuts_action(self):
-        action = Gio.SimpleAction.new("shortcuts", None)
-        action.connect("activate", self.show_shortcuts_window)
-        return action
-
-    def on_drawing_area_click(self, controller, n_press, x, y):
-        if not self.drawing_mode:
-            self.set_drawing_mode(True)
 
     def set_drawing_mode(self, drawing: bool):
+        if self.drawing_mode == drawing:
+            return
+        
         self.drawing_mode = drawing
         if drawing:
             self.set_cursor(Gdk.Cursor.new_from_name("none"))
-            self.frame.remove_css_class("drawing-frame-inactive")
-            self.frame.add_css_class("drawing-frame-active")
-            self.bottom_banner.set_title("🖱️ Mouse captured! Press Esc to exit.")
+            self.frame.set_css_classes(["drawing-frame", "drawing-frame-active"])
+            self.banner.set_title("🖱️ Mouse captured! Press Esc to exit.")
         else:
             self.set_cursor(Gdk.Cursor.new_from_name("default"))
-            self.frame.remove_css_class("drawing-frame-active")
-            self.frame.add_css_class("drawing-frame-inactive")
-            self.bottom_banner.set_title("Click anywhere on the pad to start drawing ✏️")
+            self.frame.set_css_classes(["drawing-frame", "drawing-frame-inactive"])
+            self.banner.set_title("Click anywhere on the pad to start drawing ✏️")
 
         self.drawing_area.queue_draw()
 
     def update_pen_selector(self):
-        # pass
-        child = self.pen_selector_box.get_first_child()
-        i = 0
-        while child:
+        for i, child in enumerate(self.pen_selector_box):
             if i == self.pen_index:
                 child.set_css_classes(["pen-selected"])
             else:
                 child.set_css_classes(["pen"])
-            child = child.get_next_sibling()
-            i += 1
 
     def on_pen_selected(self, btn, idx):
         self.pen_index = idx
         self.update_pen_selector()
-
-    def on_open_clicked(self, btn):
-        # TODO: implement open
-        pass
-
-    def on_save_clicked(self, btn=None):
-        self.set_drawing_mode(False)  # Switch to normal mode when saving
-        self.save_as_dialog()
 
     def handle_device_init(self) -> None:
         # Get window size (fullscreen, so only set once)
@@ -343,7 +337,9 @@ class MainWindow(Gtk.ApplicationWindow):
         else:
             raise ValueError("Unsupported filetype")
 
-    def save_as_dialog(self) -> None:
+    def on_save_clicked(self, btn=None) -> None:
+        self.set_drawing_mode(False)  # Switch to normal mode when saving
+
         dialog = Gtk.FileChooserDialog(
             title="Save Drawing",
             transient_for=self,
@@ -356,36 +352,38 @@ class MainWindow(Gtk.ApplicationWindow):
         )
 
         # Create filters
-        svg_filter = Gtk.FileFilter()
-        svg_filter.set_name("svg")
-        svg_filter.add_mime_type("image/svg+xml")
-        svg_filter.add_pattern("*.svg")
+        svg_filter = Gtk.FileFilter(
+            name="svg",
+            mime_types=["image/svg+xml"],
+            patterns=["*.svg"]
+        )
         dialog.add_filter(svg_filter)
 
-        png_filter = Gtk.FileFilter()
-        png_filter.set_name("png")
-        png_filter.add_mime_type("image/png")
-        png_filter.add_pattern("*.png")
+        png_filter = Gtk.FileFilter(
+            name="png",
+            mime_types=["image/png"],
+            patterns=["*.png"]
+        )
         dialog.add_filter(png_filter)
 
         # Suggest a default file name
         dialog.set_current_name("drawing")
 
-        dialog.connect("response", self.on_file_save_response)
+        def on_file_save_response(dialog, response):
+            if response == Gtk.ResponseType.ACCEPT:
+                file = dialog.get_file()
+                if file:
+                    filename = file.get_path()
+
+                    # Determine filetype from selected filter
+                    selected_filter = dialog.get_filter()
+                    filetype = selected_filter.get_name() if selected_filter else "svg"
+
+                    self.export(filename, filetype)
+            dialog.destroy()
+        
+        dialog.connect("response", on_file_save_response)
         dialog.present()
-
-    def on_file_save_response(self, dialog, response):
-        if response == Gtk.ResponseType.ACCEPT:
-            file = dialog.get_file()
-            if file:
-                filename = file.get_path()
-
-                # Determine filetype from selected filter
-                selected_filter = dialog.get_filter()
-                filetype = selected_filter.get_name() if selected_filter else "svg"
-
-                self.export(filename, filetype)
-        dialog.destroy()
 
     def on_key(self, controller, keyval: int, keycode: int, state: int) -> None:
         keyval_lower = chr(keyval).lower()
@@ -441,7 +439,7 @@ class MainWindow(Gtk.ApplicationWindow):
         group_general = Gtk.ShortcutsGroup(title="General")
         group_general.add_shortcut(Gtk.ShortcutsShortcut(title="Normal mode", accelerator="Escape"))
         group_general.add_shortcut(Gtk.ShortcutsShortcut(title="Shortcuts", accelerator="F1 question"))
-        group_general.add_shortcut(Gtk.ShortcutsShortcut(title="Quit", accelerator="Q"))
+        group_general.add_shortcut(Gtk.ShortcutsShortcut(title="Quit", accelerator="<Ctrl>Q"))
         section.add_group(group_general)
 
         # File group
