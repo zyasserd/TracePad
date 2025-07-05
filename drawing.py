@@ -220,7 +220,7 @@ class MainWindow(Gtk.ApplicationWindow):
         # TODO: implement open
         pass
 
-    def on_save_clicked(self, btn):
+    def on_save_clicked(self, btn=None):
         self.set_drawing_mode(False)  # Switch to normal mode when saving
         self.save_as_dialog()
 
@@ -376,82 +376,88 @@ class MainWindow(Gtk.ApplicationWindow):
             raise ValueError("Unsupported filetype")
 
     def save_as_dialog(self) -> None:
-        self.save_dialog = Gtk.FileDialog.new()
-        self.save_dialog.set_title("Save Drawing")
+        dialog = Gtk.FileChooserDialog(
+            title="Save Drawing",
+            transient_for=self,
+            modal=True,
+            action=Gtk.FileChooserAction.SAVE
+        )
+        dialog.add_buttons(
+            "_Cancel", Gtk.ResponseType.CANCEL,
+            "_Save", Gtk.ResponseType.ACCEPT
+        )
 
         # Create filters
         svg_filter = Gtk.FileFilter()
-        svg_filter.set_name("SVG files")
+        svg_filter.set_name("svg")
         svg_filter.add_mime_type("image/svg+xml")
         svg_filter.add_pattern("*.svg")
+        dialog.add_filter(svg_filter)
 
         png_filter = Gtk.FileFilter()
-        png_filter.set_name("PNG files")
+        png_filter.set_name("png")
         png_filter.add_mime_type("image/png")
         png_filter.add_pattern("*.png")
+        dialog.add_filter(png_filter)
 
         jpg_filter = Gtk.FileFilter()
-        jpg_filter.set_name("JPEG files")
+        jpg_filter.set_name("jpg")
         jpg_filter.add_mime_type("image/jpeg")
         jpg_filter.add_pattern("*.jpg")
         jpg_filter.add_pattern("*.jpeg")
-
-        filters = Gio.ListStore.new(Gtk.FileFilter)
-        filters.append(svg_filter)
-        filters.append(png_filter)
-        filters.append(jpg_filter)
-
-        self.save_dialog.set_filters(filters)
-        self.save_dialog.set_default_filter(svg_filter)
+        dialog.add_filter(jpg_filter)
 
         # Suggest a default file name
-        self.save_dialog.set_initial_name("drawing.svg")
+        dialog.set_current_name("drawing.svg")
 
-        # Show the dialog
-        self.save_dialog.save(self, None, self._on_save_dialog_response)
+        dialog.connect("response", self.on_file_save_response)
+        dialog.present()
 
-    def _on_save_dialog_response(self, dialog: Gtk.FileDialog, result: int) -> None:
-        try:
-            file = dialog.save_finish(result)
-            if file is not None:
-                # TODO: do it with the filters
+    def on_file_save_response(self, dialog, response):
+        if response == Gtk.ResponseType.ACCEPT:
+            file = dialog.get_file()
+            if file:
                 filename = file.get_path()
-                # Determine filetype from extension
-                if filename.lower().endswith(".svg"):
-                    filetype = "svg"
-                elif filename.lower().endswith(".png"):
-                    filetype = "png"
-                elif filename.lower().endswith((".jpg", ".jpeg")):
-                    filetype = "jpg"
-                else:
-                    filetype = "svg"  # Default
+
+                # Determine filetype from selected filter
+                selected_filter = dialog.get_filter()
+                filetype = selected_filter.get_name() if selected_filter else "svg"
+
                 self.export(filename, filetype)
-        except GLib.Error as error:
-            # TODO: show be a dialog with error
-            # NOTE: dismissed by used is an error
-            print(f"Error saving file: {error.message}")
+        dialog.destroy()
 
     def on_key(self, controller, keyval: int, keycode: int, state: int) -> None:
-        if (keyval == Gdk.KEY_z or keyval == Gdk.KEY_Z) and (state & Gdk.ModifierType.CONTROL_MASK):
-            self.undo_last_stroke()
-        elif (keyval == Gdk.KEY_y or keyval == Gdk.KEY_Y) and (state & Gdk.ModifierType.CONTROL_MASK):
-            self.redo_last_stroke()
-        elif keyval == Gdk.KEY_Escape:
-            self.set_drawing_mode(False)
-        elif keyval == Gdk.KEY_q or keyval == Gdk.KEY_Q:
-            self.touchpad_reader.stop()
-            self.get_application().quit()
-        elif keyval == Gdk.KEY_s or keyval == Gdk.KEY_S:
-            self.on_save_clicked()
-        elif keyval == Gdk.KEY_p or keyval == Gdk.KEY_P:
-            self.cycle_pen_type()
-        elif keyval == Gdk.KEY_c or keyval == Gdk.KEY_C:
-            self.clear_drawing()
-        elif keyval == Gdk.KEY_F1 or keyval == Gdk.KEY_question:
-            self.show_shortcuts_dialog(None, None)
-        elif keyval in {Gdk.KEY_1 + i for i in range(len(self.pens))}:
-            self.pen_index = keyval - Gdk.KEY_1
-            self.update_pen_selector()
+        keyval_lower = chr(keyval).lower()
+        is_control = bool(state & Gdk.ModifierType.CONTROL_MASK)
+
+        match (is_control, keyval_lower, keyval):
+            # Ctrl+Z/Y/S/Q
+            case (True, 'z', _) :
+                self.undo_last_stroke()
+            case (True, 'y', _) :
+                self.redo_last_stroke()
+            case (True, 's', _) :
+                self.on_save_clicked()
+            case (True, 'q', _) :
+                self.touchpad_reader.stop()
+                self.get_application().quit()
+            # Escape
+            case (_, _, Gdk.KEY_Escape):
+                self.set_drawing_mode(False)
+            # Switch pens: 'p' or number keys
+            case (_, 'p', _):
+                self.cycle_pen_type()
+            case (_, _, k) if Gdk.KEY_1 <= k < Gdk.KEY_1 + len(self.pens):
+                self.pen_index = k - Gdk.KEY_1
+                self.update_pen_selector()
+            # Clear
+            case (_, 'c', _):
+                self.clear_drawing()
+            # Help
+            case (_, _, Gdk.KEY_F1) | (_, _, Gdk.KEY_question):
+                self.show_shortcuts_dialog(None, None)
+            case _:
+                pass
 
 
 class MyApp(Adw.Application):
