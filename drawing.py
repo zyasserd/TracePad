@@ -76,11 +76,12 @@ class MainWindow(Gtk.ApplicationWindow):
 
         # [[ PENS ]]
         self.pens = [
-            Pen(color=(1, 0, 0, 1), width=2),
-            Pen(color=(1, 1, 1, 1), width=2),
-            Pen(color=(1, 1, 0, 0.3), width=18, supports_incremental_drawing=False),
+            Pen("red ballpoint", color=(1, 0, 0, 1), width=2),
+            Pen("white ballpoint", color=(1, 1, 1, 1), width=2),
+            Pen("yellow highlighter", color=(1, 1, 0, 0.3), width=18, supports_incremental_drawing=False),
             CalligraphyPen(color=(0.1, 0.15, 0.4, 1), width=10, angle=45),
             PointerPen(color=(0, 1, 0, 1), width=16),
+            Eraser(),
         ]
         self.pen_index = 0
 
@@ -95,31 +96,13 @@ class MainWindow(Gtk.ApplicationWindow):
             btn = Gtk.Button()
             btn.set_size_request(48, 48)
             btn.set_css_classes(["pen"])
-            btn.set_tooltip_text(f"Pen {i+1}") # TODO: add pen name as well
+            btn.set_tooltip_text(f"({i+1}) {pen.name}")
             btn.connect("clicked", self.on_pen_selected, i)
-            # Draw color circle
+
+            # Draw selector icon
             drawing = Gtk.DrawingArea()
+            drawing.set_draw_func(pen.draw_selector_icon)
 
-            # TODO: move to the pen class
-            # TODO: change to a better looking curve
-            def reverse_s_points(n):
-                # p = [(0, 0.3), (0.3, 1.0), (0.7, 0.0), (1, 0.7)]
-                (a, b) = (1.5, 0.75)
-                p = [(0, 0.25), (0.5 + a, 0.5 - b), (0.5 - a, 0.5 + b), (1, 0.75)]
-                def bezier(t):
-                    u = 1-t
-                    return Vec2(
-                        u**3*p[0][0] + 3*u**2*t*p[1][0] + 3*u*t**2*p[2][0] + t**3*p[3][0],
-                        u**3*p[0][1] + 3*u**2*t*p[1][1] + 3*u*t**2*p[2][1] + t**3*p[3][1]
-                    )
-                return [bezier(i/(n-1)) for i in range(n)]
-
-            def draw_circle(area, cr, w, h, pen=pen):
-                myStroke = Stroke(pen)
-                for i in reverse_s_points(32):
-                    myStroke.add_point(Vec2(i.x*w, i.y*h))
-                myStroke.draw(cr)
-            drawing.set_draw_func(draw_circle)
             btn.set_child(drawing)
             self.pen_selector_box.append(btn)
         self.update_pen_selector()
@@ -282,7 +265,9 @@ class MainWindow(Gtk.ApplicationWindow):
         if ended:
             for slot in ended:
                 self.stroke_manager.end_stroke(slot)
-            # Redraw cache surface only once after all ended strokes
+
+        if ended or self.stroke_manager.require_redraw:
+            # Redraw cache surface only once after all ended strokes or stroke_manager.require_redraw
             self.rebuild_surface_from_strokes()
         
         # Start or update strokes for active slots

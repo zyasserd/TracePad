@@ -1,24 +1,28 @@
-- read the code and understand it properly
-- see lots of gtk code examples
+- python learn
+	- named / positional parameters
+	- name class with names ??
+	- type hinting in 'Type'
 
-- Header Bar (Reveals on Hover at Top)
-	- Open File
+- read the code and understand it properly
+
+---
+
+- Pen Type Selector
+	- new pens
+		- eraser (area / objects)
+
+- Header Bar
 	- Save File buttons
 	- Hamburger menu (for settings/about/quit)
 		- include shortcuts on the right of each item
-		- shortcut menu
-			- redesign
 
-- mode indicator bottom banner
-	- make it looks more like LibAdwaita
-		- check a status bar or sth
-	
-- Pen Type Selector
-	- make vertical maybe
-	- then display it nicely, like a stroke or sth
+		- Preferences
+			- pen types
+		- keyboard shortcuts
+		- about
 
 - save dialog
-	- TODOS
+	- TODO
 		- you can not use filters to pick the file type when saving
 
 	- increase quality of raster photos
@@ -27,10 +31,20 @@
 
 	- add ctrl+s for saving
 
-- browse notes?
-	- open file
+- maybe move the banner to the bottom more like status bar?
 
 ---
+
+- UI reform
+	- see lots of gtk code examples
+	- use blueprint and fully libadwaita
+		- error for 1.5
+			- can't get the `AdwShortcutsDialog`
+
+
+- publication
+	- add to nixpkgs
+	- licenses
 
 - Notes
 	- taking control over the pointer
@@ -39,6 +53,10 @@
 
 - (BUG) highlighter rendering issue when lingering
 	- too many points causes it to jitter
+
+- (feature) browse notes
+	- open file
+	- need own file format (or import from svg?)
 
 - (EXTRA) real-time stroke smoothing / Path Smoothing Algorithms
 	- is it needed
