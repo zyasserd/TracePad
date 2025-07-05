@@ -1,5 +1,6 @@
 import cairo
 import tempfile
+from math import sqrt
 from PIL import Image  # Add to imports
 
 import gi
@@ -45,17 +46,33 @@ class MainWindow(Gtk.ApplicationWindow):
         menu_btn.set_menu_model(menu)
         self.header_bar.pack_end(menu_btn)
 
-        self.overlay.add_overlay(self.header_bar)
+        # self.overlay.add_overlay(self.header_bar)
         self.header_bar.set_halign(Gtk.Align.FILL)
         self.header_bar.set_valign(Gtk.Align.START)
 
-        # [[ PEN SELECTOR (Bottom Left) ]]
-        self.pen_selector_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.pen_selector_box.set_halign(Gtk.Align.START)
-        self.pen_selector_box.set_valign(Gtk.Align.END)
-        self.pen_selector_box.set_margin_start(24)
-        self.pen_selector_box.set_margin_bottom(24)
-        self.overlay.add_overlay(self.pen_selector_box)
+        # [[ TOP OVERLAY: Banner below header bar ]]
+        self.top_overlay_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.top_overlay_box.set_halign(Gtk.Align.FILL)
+        self.top_overlay_box.set_valign(Gtk.Align.START)
+        self.top_overlay_box.set_margin_top(0)
+        self.top_overlay_box.set_margin_bottom(0)
+        self.top_overlay_box.set_margin_start(0)
+        self.top_overlay_box.set_margin_end(0)
+        # Add header bar and banner to the top overlay box
+        # (header bar is already overlaid, so only add banner here)
+
+        # [[ BOTTOM BANNER (Adw.Banner) -- now at top after header bar ]]
+        self.bottom_banner = Adw.Banner()
+        self.bottom_banner.set_halign(Gtk.Align.FILL)
+        self.bottom_banner.set_valign(Gtk.Align.END)
+        self.bottom_banner.set_revealed(True)
+        self.bottom_banner.set_margin_bottom(0)
+        self.bottom_banner.set_margin_top(0)
+        self.bottom_banner.set_css_classes(["big-banner-radius"])
+
+        self.top_overlay_box.append(self.header_bar)
+        self.top_overlay_box.append(self.bottom_banner)
+        self.overlay.add_overlay(self.top_overlay_box)
 
         # [[ PENS ]]
         self.pens = [
@@ -66,8 +83,47 @@ class MainWindow(Gtk.ApplicationWindow):
             PointerPen(color=(0, 1, 0, 1), width=16),
         ]
         self.pen_index = 0
+
+        # [[ PEN SELECTOR (Bottom Left) ]]
+        self.pen_selector_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.pen_selector_box.set_halign(Gtk.Align.START)
+        self.pen_selector_box.set_valign(Gtk.Align.END)
+        self.pen_selector_box.set_margin_start(24)
+        self.pen_selector_box.set_margin_bottom(24)
+        self.overlay.add_overlay(self.pen_selector_box)
+        for i, pen in enumerate(self.pens):
+            btn = Gtk.Button()
+            btn.set_size_request(48, 48)
+            btn.set_css_classes(["pen"])
+            btn.set_tooltip_text(f"Pen {i+1}") # TODO: add pen name as well
+            btn.connect("clicked", self.on_pen_selected, i)
+            # Draw color circle
+            drawing = Gtk.DrawingArea()
+
+            # TODO: move to the pen class
+            # TODO: change to a better looking curve
+            def reverse_s_points(n):
+                # p = [(0, 0.3), (0.3, 1.0), (0.7, 0.0), (1, 0.7)]
+                (a, b) = (1.5, 0.75)
+                p = [(0, 0.25), (0.5 + a, 0.5 - b), (0.5 - a, 0.5 + b), (1, 0.75)]
+                def bezier(t):
+                    u = 1-t
+                    return Vec2(
+                        u**3*p[0][0] + 3*u**2*t*p[1][0] + 3*u*t**2*p[2][0] + t**3*p[3][0],
+                        u**3*p[0][1] + 3*u**2*t*p[1][1] + 3*u*t**2*p[2][1] + t**3*p[3][1]
+                    )
+                return [bezier(i/(n-1)) for i in range(n)]
+
+            def draw_circle(area, cr, w, h, pen=pen):
+                myStroke = Stroke(pen)
+                for i in reverse_s_points(32):
+                    myStroke.add_point(Vec2(i.x*w, i.y*h))
+                myStroke.draw(cr)
+            drawing.set_draw_func(draw_circle)
+            btn.set_child(drawing)
+            self.pen_selector_box.append(btn)
         self.update_pen_selector()
-        
+
         # [[ TOUCHPAD THREAD ]]
         self.touchpad_reader = TouchpadReaderThread(
             self.handle_device_init,
@@ -103,15 +159,6 @@ class MainWindow(Gtk.ApplicationWindow):
         self.stroke_manager = StrokeManager()
         self.strokes_surface = None
         self.surface_size = None
-
-        # [[ BOTTOM BANNER (Adw.Banner) ]]
-        self.bottom_banner = Adw.Banner()
-        self.bottom_banner.set_halign(Gtk.Align.CENTER)
-        self.bottom_banner.set_valign(Gtk.Align.END)
-        self.bottom_banner.set_revealed(True)
-        self.bottom_banner.set_margin_bottom(32)
-        self.bottom_banner.set_css_classes(["big-banner-radius"])
-        self.overlay.add_overlay(self.bottom_banner)
 
         self.set_drawing_mode(True)
 
@@ -171,35 +218,16 @@ class MainWindow(Gtk.ApplicationWindow):
         self.drawing_area.queue_draw()
 
     def update_pen_selector(self):
-        # Remove old children (GTK4: use get_first_child and remove in a loop)
+        # pass
         child = self.pen_selector_box.get_first_child()
+        i = 0
         while child:
-            next_child = child.get_next_sibling()
-            self.pen_selector_box.remove(child)
-            child = next_child
-        # Add pen buttons
-        for i, pen in enumerate(self.pens):
-            btn = Gtk.Button()
-            btn.set_size_request(32, 32)
-            btn.set_tooltip_text(f"Pen {i+1}")
-            btn.connect("clicked", self.on_pen_selected, i)
-            # Draw color circle
-            drawing = Gtk.DrawingArea()
-            def draw_circle(area, cr, w, h, color=pen.color, selected=(i==self.pen_index)):
-                cr.set_source_rgba(*color)
-                cr.arc(w/2, h/2, min(w, h)/2-4, 0, 2*3.1416)
-                cr.fill_preserve()
-                if selected:
-                    cr.set_source_rgba(0, 0.7, 1, 1)
-                    cr.set_line_width(3)
-                    cr.stroke()
-                else:
-                    cr.set_source_rgba(0,0,0,0.2)
-                    cr.set_line_width(1)
-                    cr.stroke()
-            drawing.set_draw_func(draw_circle)
-            btn.set_child(drawing)
-            self.pen_selector_box.append(btn)
+            if i == self.pen_index:
+                child.set_css_classes(["pen-selected"])
+            else:
+                child.set_css_classes(["pen"])
+            child = child.get_next_sibling()
+            i += 1
 
     def on_pen_selected(self, btn, idx):
         self.pen_index = idx
@@ -429,8 +457,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.touchpad_reader.stop()
             self.get_application().quit()
         elif keyval == Gdk.KEY_s or keyval == Gdk.KEY_S:
-            self.set_drawing_mode(False)
-            self.save_as_dialog()
+            self.on_save_clicked()
         elif keyval == Gdk.KEY_p or keyval == Gdk.KEY_P:
             self.cycle_pen_type()
         elif keyval == Gdk.KEY_c or keyval == Gdk.KEY_C:
@@ -467,6 +494,15 @@ class MyApp(Adw.Application):
             border-color: #888;
             box-shadow: none;
             opacity: 0.85;
+        }
+        .pen {
+            border: 1px solid #888;
+            margin: 2px;
+            padding: 0px;
+        }
+        .pen-selected {
+            border: 3px solid #00aaff;
+            padding: 0px;
         }
         '''
         provider = Gtk.CssProvider()
