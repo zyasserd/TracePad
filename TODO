@@ -1,73 +1,41 @@
+# TO LEARN
 - python learn
 	- named / positional parameters
-	- name class with names ??
 	- type hinting in 'Type'
 
 - read the code and understand it properly
 
----
+- good method to write commits
 
-- Pen Type Selector
-	- new pens
-		- eraser (area / objects)
 
-- Header Bar
-	- Save File buttons
-	- Hamburger menu (for settings/about/quit)
-		- include shortcuts on the right of each item
+# TO DO
+- Hamburger menu
+	- include shortcuts on the right of each item
 
-		- Preferences
-			- pen types
-		- keyboard shortcuts
-		- about
-
-- save dialog
-	- TODO
-		- you can not use filters to pick the file type when saving
-
-	- increase quality of raster photos
-	- jpg background color
-	- convert svg to png/jpg instead of losing quality
-
-	- add ctrl+s for saving
-
-- maybe move the banner to the bottom more like status bar?
-
----
-
-- UI reform
-	- see lots of gtk code examples
-	- use blueprint and fully libadwaita
-		- error for 1.5
-			- can't get the `AdwShortcutsDialog`
-
+- Preferences
+	- pen types
 
 - publication
+	- fill the about information
+		- name
+		- icon
+		- license
+
 	- add to nixpkgs
-	- licenses
-
-- Notes
-	- taking control over the pointer
-		- it's really hard to do that in wayland. So, I just decided to go fullscreen and then hide the pointer
 
 
+# MAYBE
 - (BUG) highlighter rendering issue when lingering
 	- too many points causes it to jitter
 
-- (feature) browse notes
-	- open file
-	- need own file format (or import from svg?)
-
-- (EXTRA) real-time stroke smoothing / Path Smoothing Algorithms
-	- is it needed
-	- mostly use a library or sth for that don't do it manually
-	- https://www.youtube.com/watch?v=ueUgHvUT2Z0
-	- https://willowsystems.github.io/jSignature/%2523%252Fabout%252Flinesmoothing%252F.html
-		- TODO: design the oval pen?
-	- https://github.com/google/ink-stroke-modeler
-
 - (EXTRA) support `capacitive stylus` mode
 	- palm rejection
+
+
+# NOTES
+- taking control over the pointer
+	- it's really hard to do that in wayland. So, I just decided to go fullscreen and then hide the pointer
+
 
 - reference
 	- https://github.com/Wazzaps/fingerpaint
@@ -85,3 +53,25 @@
 	- detexify
 		- https://github.com/QuarticCat/detypify 
 	- geometry app
+
+
+# LATER
+- UI reform
+	- see lots of gtk code examples
+	- use blueprint and fully libadwaita
+		- error for 1.5
+			- can't get the `AdwShortcutsDialog`
+
+
+- (feature) browse notes
+	- open file
+	- need own file format (or import from svg?)
+
+- (EXTRA) real-time stroke smoothing / Path Smoothing Algorithms
+	- is it needed
+	- mostly use a library or sth for that don't do it manually
+	- https://www.youtube.com/watch?v=ueUgHvUT2Z0
+	- https://willowsystems.github.io/jSignature/%2523%252Fabout%252Flinesmoothing%252F.html
+		- TODO: design the oval pen?
+	- https://github.com/google/ink-stroke-modeler
+

@@ -159,8 +159,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
 
         # [[ DRAWING MODE ]]
-        self.drawing_mode = False
-        self.set_drawing_mode(self.drawing_mode)
+        self.drawing_mode = None
+        self.set_drawing_mode(False)
 
 
         # [[ STROKE MANAGER ]]
@@ -420,9 +420,9 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def show_about_dialog(self, action=None, param=None):
         about = Adw.AboutDialog(
-            application_name="Absolute Touchpad",
-            version="1.0.0",
-            developer_name="Your Name",
+            application_name="Absolute Touchpad", # TODO: need to figure out name as well
+            version="1.0.0", # TODO: what version shall I put
+            developer_name="Zyad Yasser",
             copyright="© 2025 Your Name",
             website="https://github.com/your-repo",
             issue_url="https://github.com/your-repo/issues",
