@@ -33,10 +33,7 @@ class Vec2:
     
     def __sub__(self, other: 'Vec2') -> 'Vec2':
         return Vec2(self.x - other.x, self.y - other.y)
-    
-    def __sub__(self, other: 'Vec2') -> 'Vec2':
-        return Vec2(self.x - other.x, self.y - other.y)
-    
+
     def __mul__(self, other) -> 'Vec2':
         if isinstance(other, (int, float)):  # Scalar multiplication
             return Vec2(self.x * other, self.y * other)
@@ -246,9 +243,9 @@ class CalligraphyPen(Pen):
 
 
 class PointerPen(Pen):
-    def __init__(self, color: Tuple[float, float, float, float] = (0, 1, 0, 1), width: float = 16) -> None:
+    def __init__(self, color: Tuple[float, float, float, float] = (0, 1, 0, 1), width: float = 16, max_length: int = 250) -> None:
         def stroke_add_point_handler(str: Stroke):
-            if len(str.points) > 250:
+            if len(str.points) > max_length:
                 del str.points[0]
 
         super().__init__(
@@ -281,6 +278,9 @@ class Eraser(Pen):
         )
 
     def draw(self, cr: cairo.Context, points: List[Vec2]) -> None:
+        """
+        No draw functionality, so that it doesn't leave trace
+        """
         pass
 
     def draw_cursor(self, cr: cairo.Context, point: Vec2, scaling_ratio=1) -> None:
