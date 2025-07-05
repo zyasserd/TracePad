@@ -51,7 +51,6 @@
             pycairo
             evdev
             psutil
-            pillow
           ]))
         ] ++ (with pkgs; [
           libadwaita

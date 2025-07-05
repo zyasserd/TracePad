@@ -1,7 +1,4 @@
 import cairo
-import tempfile
-from math import sqrt
-from PIL import Image  # Add to imports
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -353,25 +350,15 @@ class MainWindow(Gtk.ApplicationWindow):
             self.rebuild_surface_from_strokes()
 
     def export(self, filename: str, filetype: str) -> None:
-        width, height = int(self.surface_size.x), int(self.surface_size.y)
         if filetype == "svg":
-            surface = cairo.SVGSurface(filename, width, height)
+            surface = cairo.SVGSurface(filename, *self.surface_size)
             self.stroke_manager.draw(surface)
             surface.finish()
         elif filetype == "png":
-            surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
-            self.stroke_manager.draw(surface)
+            scale = 4
+            surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, *(self.surface_size * scale))
+            self.stroke_manager.draw(surface, scale=scale)
             surface.write_to_png(filename)
-        elif filetype == "jpg":
-            if Image is None:
-                raise RuntimeError("Pillow (PIL) is required for JPG export.")
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
-                self.stroke_manager.draw(surface)
-                surface.write_to_png(tmp.name)
-                img = Image.open(tmp.name)
-                rgb_img = img.convert('RGB')
-                rgb_img.save(filename, "JPEG")
         else:
             raise ValueError("Unsupported filetype")
 
@@ -400,15 +387,8 @@ class MainWindow(Gtk.ApplicationWindow):
         png_filter.add_pattern("*.png")
         dialog.add_filter(png_filter)
 
-        jpg_filter = Gtk.FileFilter()
-        jpg_filter.set_name("jpg")
-        jpg_filter.add_mime_type("image/jpeg")
-        jpg_filter.add_pattern("*.jpg")
-        jpg_filter.add_pattern("*.jpeg")
-        dialog.add_filter(jpg_filter)
-
         # Suggest a default file name
-        dialog.set_current_name("drawing.svg")
+        dialog.set_current_name("drawing")
 
         dialog.connect("response", self.on_file_save_response)
         dialog.present()

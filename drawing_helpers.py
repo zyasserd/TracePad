@@ -378,8 +378,9 @@ class StrokeManager:
     def get_all_strokes(self) -> list['Stroke']:
         return self.completed_strokes + list(self.current_strokes.values())
     
-    def draw(self, surface) -> None:
+    def draw(self, surface, scale=1) -> None:
         cr = cairo.Context(surface)
+        cr.scale(scale, scale)
         for stroke in self.get_all_strokes():
             stroke.draw(cr)
         self.require_redraw = False
