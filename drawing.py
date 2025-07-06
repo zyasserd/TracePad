@@ -1,4 +1,5 @@
 import cairo
+import copy
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -55,7 +56,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.get_application().add_action(action)
         _add_menu_action("about", self.show_about_dialog)
         _add_menu_action("shortcuts", self.show_shortcuts_window)
-        _add_menu_action("preferences", lambda a, p: None)  # Placeholder
+        _add_menu_action("preferences", self.show_preferences_dialog)
 
 
         # [[ TOP OVERLAY: header_bar + banner ]]
@@ -100,23 +101,7 @@ class MainWindow(Gtk.ApplicationWindow):
             spacing=8,
         )
         self.overlay.add_overlay(self.pen_selector_box)
-        # TODO: add it to a diff function, cuz we will need to update later
-        for i, pen in enumerate(self.pens):
-            btn = Gtk.Button(
-                width_request=48,
-                height_request=48,
-                css_classes=["pen"],
-                tooltip_text=f"({i+1}) {pen.name}",
-            )
-            btn.connect("clicked", self.on_pen_selected, i)
-
-            # Draw selector icon
-            drawing = Gtk.DrawingArea()
-            drawing.set_draw_func(pen.draw_selector_icon)
-
-            btn.set_child(drawing)
-            self.pen_selector_box.append(btn)
-        self.update_pen_selector()
+        self.recreate_pen_selector()
 
 
         # [[ TOUCHPAD THREAD ]]
@@ -462,7 +447,236 @@ class MainWindow(Gtk.ApplicationWindow):
 
         shortcuts.add_section(section)
         shortcuts.present()
-        
+    
+    def show_preferences_dialog(self, action=None, param=None):
+        dialog = Gtk.Dialog(
+            title="Edit Pens",
+            transient_for=self,
+            modal=True,
+            use_header_bar=True,
+            resizable=False
+        )
+
+        # Use set_child instead of deprecated get_content_area
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16, margin_top=16, margin_bottom=16, margin_start=16, margin_end=16)
+        dialog.set_child(box)
+
+        # Pens List with Scrollbar
+        pens_list_scroller = Gtk.ScrolledWindow(
+            vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
+            width_request=160
+        )
+        pens_list_scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        box.append(pens_list_scroller)
+
+        # Pens List
+        pens_list = Gtk.ListBox(
+            selection_mode=Gtk.SelectionMode.SINGLE
+        )
+        pens_list_scroller.set_child(pens_list)
+
+        # Pen Properties
+        prop_grid = Gtk.Grid(row_spacing=8, column_spacing=8, margin_start=16)
+        box.append(prop_grid)
+
+        # Pen type mapping, TODO:
+        pen_type_names = ["Pen", "CalligraphyPen", "PointerPen", "Eraser"]
+        pen_type_labels = ["Ballpoint", "Calligraphy", "Pointer", "Eraser"]
+
+        # Property widgets
+        name_entry = Gtk.Entry()
+        width_adjustment = Gtk.Adjustment(value=1, lower=1, upper=64, step_increment=1, page_increment=4, page_size=0)
+        width_spin = Gtk.SpinButton(adjustment=width_adjustment)
+        type_combo = Gtk.ComboBoxText()
+        for t_name, label in zip(pen_type_names, pen_type_labels):
+            type_combo.append(t_name, label)
+
+        # Add Delete and Add Pen buttons side by side
+        add_btn = Gtk.Button(label="+ Add Pen")
+        delete_btn = Gtk.Button(label="Delete Pen")
+        delete_btn.set_css_classes(["destructive-action"])
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_box.append(delete_btn)
+        btn_box.append(add_btn)
+
+        # Color display and color dialog in a horizontal box
+        color_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        color_canvas = Gtk.DrawingArea(
+            width_request=32,
+            height_request=32
+        )
+        color_box.append(color_canvas)
+        color_dialog_btn = Gtk.Button(label="Select Color")
+        color_box.append(color_dialog_btn)
+
+        # Add to grid
+        prop_grid.attach(Gtk.Label(label="Name:"), 0, 0, 1, 1)
+        prop_grid.attach(name_entry, 1, 0, 1, 1)
+        prop_grid.attach(Gtk.Label(label="Color:"), 0, 1, 1, 1)
+        prop_grid.attach(color_box, 1, 1, 1, 1)
+        prop_grid.attach(Gtk.Label(label="Width:"), 0, 2, 1, 1)
+        prop_grid.attach(width_spin, 1, 2, 1, 1)
+        prop_grid.attach(Gtk.Label(label="Type:"), 0, 3, 1, 1)
+        prop_grid.attach(type_combo, 1, 3, 1, 1)
+        prop_grid.attach(btn_box, 1, 4, 1, 1)
+
+
+
+        # copy of pens
+        edited_pens = [copy.deepcopy(pen) for pen in self.pens] # TODO:
+        selected_pen_idx = [self.pen_index]
+
+
+        # Color dialog logic
+        def on_color_dialog_clicked(btn):
+            pen = edited_pens[selected_pen_idx[0]]
+            dialog = Gtk.ColorDialog()
+            def on_color_chosen(dialog, result):
+                try:
+                    color = dialog.choose_rgba_finish(result)
+                except GLib.GError:
+                    return  # User dismissed dialog, ignore
+                if color:
+                    pen.color = (color.red, color.green, color.blue, color.alpha)
+                    color_canvas.queue_draw()
+            dialog.choose_rgba(self, Gdk.RGBA(*pen.color), None, on_color_chosen)
+        color_dialog_btn.connect("clicked", on_color_dialog_clicked)
+
+
+        # The color to display is tracked in a closure
+        def draw_color_canvas(area, cr, width, height):
+            cr.set_source_rgba(*edited_pens[selected_pen_idx[0]].color)
+            cr.rectangle(0, 0, width, height)
+            cr.fill()
+        color_canvas.set_draw_func(draw_color_canvas)
+
+
+        # Populate pens list
+        for pen in edited_pens:
+            pens_list.append(Gtk.ListBoxRow(
+                selectable=True,
+                child=Gtk.Label(label=pen.name)
+            ))
+        pens_list.select_row(pens_list.get_row_at_index(selected_pen_idx[0]))
+
+
+        def on_pen_selected(listbox, row):
+            if not row:
+                return
+            selected_pen_idx[0] = row.get_index()
+            update_properties()
+        pens_list.connect("row-selected", on_pen_selected)
+
+        # Helper to update property widgets
+        def update_properties():
+            pen = edited_pens[selected_pen_idx[0]]
+
+            # Block signals to avoid triggering on_prop_changed
+            name_entry.handler_block_by_func(on_prop_changed)
+            width_spin.handler_block_by_func(on_prop_changed)
+            type_combo.handler_block_by_func(on_prop_changed)
+
+            name_entry.set_text(pen.name)
+            color_canvas.queue_draw()
+            width_spin.set_value(pen.width)
+            type_combo.set_active_id(type(pen).__name__)
+
+            # Unblock signals after setting values
+            name_entry.handler_unblock_by_func(on_prop_changed)
+            width_spin.handler_unblock_by_func(on_prop_changed)
+            type_combo.handler_unblock_by_func(on_prop_changed)
+
+        # Update pen on property change
+        def on_prop_changed(*args):
+            idx = selected_pen_idx[0]
+            pen = edited_pens[idx]
+
+
+            t_id = type_combo.get_active_id()
+            if not t_id:
+                return
+            
+            pen.name = name_entry.get_text()
+            pen.width = width_spin.get_value()
+            # Color is already handled separately
+
+            if type(pen).__name__ != t_id:
+                if t_id == "Pen":
+                    new_pen = Pen(pen.name, color=pen.color, width=pen.width)
+                elif t_id == "CalligraphyPen":
+                    new_pen = CalligraphyPen(color=pen.color, width=pen.width, angle=45) # TODO: make angle editable
+                    new_pen.pen = pen.name
+                elif t_id == "PointerPen":
+                    new_pen = PointerPen(color=pen.color, width=pen.width)
+                    new_pen.pen = pen.name
+                elif t_id == "Eraser":
+                    new_pen = Eraser()
+                    new_pen.name = pen.name
+                else:
+                    raise RuntimeError("Unknown pen type selected in preferences dialog")
+                edited_pens[idx] = new_pen
+            # Update list label
+            pens_list.get_row_at_index(idx).get_child().set_label(edited_pens[idx].name)
+        name_entry.connect("changed", on_prop_changed)
+        width_spin.connect("value-changed", on_prop_changed)
+        type_combo.connect("changed", on_prop_changed)
+
+        # Delete pen
+        def on_delete_clicked(btn):
+            idx = selected_pen_idx[0]
+            if len(edited_pens) > 1:
+                edited_pens.pop(idx)
+                pens_list.remove(pens_list.get_row_at_index(idx))
+                if idx > 0:
+                    pens_list.select_row(pens_list.get_row_at_index(idx-1))
+                else:
+                    pens_list.select_row(pens_list.get_row_at_index(0))
+        delete_btn.connect("clicked", on_delete_clicked)
+
+        # Add pen
+        def on_add_clicked(btn):
+            new_pen = Pen("New Pen", color=(0,0,0,1), width=2)
+            edited_pens.append(new_pen)
+            row = Gtk.ListBoxRow()
+            row.pen_index = len(edited_pens)-1
+            row.set_child(Gtk.Label(label=new_pen.name))
+            pens_list.append(row)
+            pens_list.select_row(row)
+        add_btn.connect("clicked", on_add_clicked)
+
+        # Save/Cancel
+        dialog.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Save", Gtk.ResponseType.OK)
+
+        def on_response(dlg, resp):
+            if resp == Gtk.ResponseType.OK:
+                # Save changes: copy edited_pens to self.pens
+                self.pens = [copy.deepcopy(pen) for pen in edited_pens]
+                self.recreate_pen_selector()
+            dlg.destroy()
+        dialog.connect("response", on_response)
+
+        # Initialize property widgets
+        update_properties()
+        dialog.present()
+
+    def recreate_pen_selector(self):
+        # Remove all children from pen_selector_box
+        for child in list(self.pen_selector_box):
+            self.pen_selector_box.remove(child)
+        # Recreate pen selector buttons
+        for i, pen in enumerate(self.pens):
+            btn = Gtk.Button(
+                width_request=48,
+                height_request=48,
+                css_classes=["pen"],
+                tooltip_text=f"({i+1}) {pen.name}",
+            )
+            btn.connect("clicked", self.on_pen_selected, i)
+            drawing = Gtk.DrawingArea()
+            drawing.set_draw_func(pen.draw_selector_icon)
+            btn.set_child(drawing)
+            self.pen_selector_box.append(btn)
+        self.update_pen_selector()
 
 class MyApp(Adw.Application):
     def __init__(self) -> None:

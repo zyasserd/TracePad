@@ -159,7 +159,7 @@ class TouchpadReaderThread:
 class Pen:
     name : str
     color: Tuple[float, float, float, float] = (0, 0, 0, 1)
-    width: float = 2
+    width: int = 2
     supports_incremental_drawing: bool = True
     is_temporary: bool = False
     stroke_add_point_handler: Optional[Callable[['Stroke'], None]] = None
@@ -209,7 +209,7 @@ class Pen:
         
     
 class CalligraphyPen(Pen):
-    def __init__(self, color: Tuple[float, float, float, float] = (0, 0, 0, 1), width: float = 10, angle: float = 45) -> None:
+    def __init__(self, color: Tuple[float, float, float, float] = (0, 0, 0, 1), width: int = 10, angle: float = 45) -> None:
         super().__init__("calligraphy pen", color, width, supports_incremental_drawing=True)
         self.angle = angle
         self.angle_rad = math.radians(angle)
@@ -243,7 +243,7 @@ class CalligraphyPen(Pen):
 
 
 class PointerPen(Pen):
-    def __init__(self, color: Tuple[float, float, float, float] = (0, 1, 0, 1), width: float = 16, max_length: int = 250) -> None:
+    def __init__(self, color: Tuple[float, float, float, float] = (0, 1, 0, 1), width: int = 16, max_length: int = 250) -> None:
         def stroke_add_point_handler(str: Stroke):
             if len(str.points) > max_length:
                 del str.points[0]
@@ -266,7 +266,7 @@ class PointerPen(Pen):
         return self.draw_cursor(cr, Vec2(width, height) * 0.5, 0.8)
     
 class Eraser(Pen):
-    def __init__(self, width: float = 16, is_object_eraser=True) -> None:
+    def __init__(self, width: int = 16, is_object_eraser=True) -> None:
         # TODO: implement area eraser
         assert(is_object_eraser)
         super().__init__(
