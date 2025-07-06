@@ -42,21 +42,22 @@ class MainWindow(Gtk.ApplicationWindow):
 
         # Hamburger menu
         menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
-        menu = Gio.Menu()
-        menu.append("Preferences", "app.preferences")
-        menu.append("Keyboard Shortcuts", "app.shortcuts")
-        menu.append("About", "app.about")
-        menu_btn.set_menu_model(menu)
         self.header_bar.pack_end(menu_btn)
-
+        
         # Connect hamburger menu actions
-        def _add_menu_action(name, callback):
-            action = Gio.SimpleAction.new(name, None)
+        def _add_menu_action(name, detailed_action, callback, accels):
+            menu.append(name, detailed_action)
+            action = Gio.SimpleAction.new(detailed_action.split('.')[1].lower(), None)
             action.connect("activate", callback)
             self.get_application().add_action(action)
-        _add_menu_action("about", self.show_about_dialog)
-        _add_menu_action("shortcuts", self.show_shortcuts_window)
-        _add_menu_action("preferences", self.show_preferences_dialog)
+            self.get_application().set_accels_for_action(detailed_action, accels)
+        
+        menu = Gio.Menu()
+        _add_menu_action("Preferences", "app.preferences", self.show_preferences_dialog, ["<Ctrl>comma"])
+        _add_menu_action("Keyboard Shortcuts", "app.shortcuts", self.show_shortcuts_window, ["F1", "question"])
+        _add_menu_action("About", "app.about", self.show_about_dialog, [])
+        menu_btn.set_menu_model(menu)
+
 
 
         # [[ TOP OVERLAY: header_bar + banner ]]
@@ -371,7 +372,7 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.present()
 
     def on_key(self, controller, keyval: int, keycode: int, state: int) -> None:
-        keyval_lower = chr(keyval).lower()
+        keyval_lower = chr(keyval).lower() if 0 <= keyval <= 0x10FFFF else None
         is_control = bool(state & Gdk.ModifierType.CONTROL_MASK)
 
         match (is_control, keyval_lower, keyval):
@@ -397,9 +398,6 @@ class MainWindow(Gtk.ApplicationWindow):
             # Clear
             case (_, 'c', _):
                 self.clear_drawing()
-            # Help
-            case (_, _, Gdk.KEY_F1) | (_, _, Gdk.KEY_question):
-                self.show_shortcuts_window(None, None)
             case _:
                 pass
 
@@ -424,6 +422,7 @@ class MainWindow(Gtk.ApplicationWindow):
         group_general = Gtk.ShortcutsGroup(title="General")
         group_general.add_shortcut(Gtk.ShortcutsShortcut(title="Normal mode", accelerator="Escape"))
         group_general.add_shortcut(Gtk.ShortcutsShortcut(title="Shortcuts", accelerator="F1 question"))
+        group_general.add_shortcut(Gtk.ShortcutsShortcut(title="Preferences", accelerator="<Ctrl>comma"))
         group_general.add_shortcut(Gtk.ShortcutsShortcut(title="Quit", accelerator="<Ctrl>Q"))
         section.add_group(group_general)
 
