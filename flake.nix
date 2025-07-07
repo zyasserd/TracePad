@@ -12,69 +12,53 @@
     let
       pkgs = import nixpkgs {
         inherit system;
-        # config.allowUnfree = true;
       };
 
-      python = pkgs.python3; # change version here
+      python = pkgs.python3.withPackages (ps: with ps; [
+        pygobject3
+        pygobject-stubs # for autocompletion
+        pycairo
+        evdev
+        psutil
+        setuptools
+      ]);
       pythonPackages = python.pkgs;
 
-      # (( build a package from PyPI ))
-      # myPackage = pythonPackages.buildPythonPackage rec {
-      #   pname = "<fill>";
-      #   version = "<fill>";
-      #   format = "wheel";
-      #
-      #   src = pythonPackages.fetchPypi {
-      #     inherit pname version format;
-      #     python = "py3";
-      #     dist = "py3";
-      #     sha256 = "";
-      #   };
-      #
-      #   dependencies = with pythonPackages; [
-      #
-      #   ];
-      #
-      #   # doCheck = false;
-      # };
-      
+      propagatedBuildInputs = [
+        python
+      ];
+
+      nativeBuildInputs = with pkgs; [
+        libadwaita
+        gobject-introspection
+      ];
+
+      env = {
+        GDK_BACKEND = "wayland"; # required to make the app run wayland
+        PYTHON_NIX = "${python.interpreter}";
+      };
+
     in {
 
       # `devShell` or `devShells.default`
       devShell = pkgs.mkShell {
-        # The Nix packages provided in the environment
-        # Add any you need here
+        inherit propagatedBuildInputs nativeBuildInputs env;
+
         packages = [ 
-          (python.withPackages (p: with p; [
-            pygobject3
-            pygobject-stubs # for autocompletion
-            pycairo
-            evdev
-            psutil
-          ]))
-        ] ++ (with pkgs; [
-          libadwaita
-          gobject-introspection
-          # wrapGAppsHook4
-        ]);
 
-        # Set any environment variables for your dev shell
-        env = {
-          GDK_BACKEND = "wayland"; # required to make the app run wayland
-        };
-
-        # Add any shell logic you want executed any time the environment is activated
-        shellHook = ''
-          # To be used by "ms-python.python" to set the correct version,
-          #   combined with vscode settings in .vscode dir.
-          export PYTHON_NIX="$(which python)"
-        '';
+        ];
       };
 
 
       packages = rec {
-        hello = pkgs.hello;
-        default = hello;
+        TracePad = pythonPackages.buildPythonApplication {
+          inherit propagatedBuildInputs nativeBuildInputs env;
+          pname = "TracePad";
+          version = "1.0.0-beta";
+          src = ./.;
+          format = "pyproject";
+        };
+        default = TracePad;
       };
 
     }

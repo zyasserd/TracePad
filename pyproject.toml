@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "absolute-touchpad"
+version = "1.0.0-beta"
+description = "A simple way to draw, doodle, and sign with your touchpad."
+authors = [
+    { name="Zyad Yasser" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pycairo",
+    "PyGObject",
+    "evdev",
+    "psutil"
+]
+
+[project.scripts]
+TracePad = "app:main"

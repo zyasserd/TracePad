@@ -25,8 +25,10 @@ class TouchpadReaderThread:
     def start(self) -> None:
         # TODO: pkg_resources.resource_filename('fingerpaint', 'data/fix_permissions.sh')
         script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'reader.py'))
+        python_exe = os.environ.get("PYTHON_NIX", sys.executable)
+        print(python_exe)
         self.reader_process = subprocess.Popen([
-            'pkexec', sys.executable, script_path
+            'pkexec', python_exe, script_path
         ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         self.reader_thread = threading.Thread(target=self._read_output, daemon=True)
         self.reader_thread.start()
@@ -46,7 +48,7 @@ class TouchpadReaderThread:
             try:
                 event = json.loads(line)
             except Exception:
-                GLib.idle_add(self.on_error, "Invalid JSON: [no error code] - " + line)
+                GLib.idle_add(self.on_error, "Invalid JSON: [no error code] - " + "\n".join(self.reader_process.stdout.readlines()))
                 break
 
             if 'error' in event:
