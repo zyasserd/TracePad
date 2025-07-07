@@ -6,7 +6,8 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gdk, GLib, Gio
 
-from drawing_helpers import *
+from drawing import *
+from touchpad.thread import TouchpadReaderThread
 
 
 class MainWindow(Gtk.ApplicationWindow):
