@@ -403,13 +403,13 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def show_about_dialog(self, action=None, param=None):
         about = Adw.AboutDialog(
-            application_name="Absolute Touchpad", # TODO: need to figure out name as well
-            version="1.0.0", # TODO: what version shall I put
+            application_name="TracePad",
+            version="1.0.0-beta",
             developer_name="Zyad Yasser",
             copyright="© 2025 Your Name",
             website="https://github.com/your-repo",
             issue_url="https://github.com/your-repo/issues",
-            comments="A fullscreen drawing app for touchpads."
+            comments="A simple way to draw, doodle, and sign with your touchpad!\n\nThis app turns your laptop's touchpad into an easy-to-use digital canvas. Quickly sketch, jot notes, or capture your signature with just a few clicks. The clean fullscreen interface and straightforward pen tools make it perfect for anyone who wants a fast, no-fuss way to get creative or sign documents using their touchpad."
         )
         about.present()
 
@@ -522,7 +522,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
 
         # copy of pens
-        edited_pens = [copy.deepcopy(pen) for pen in self.pens] # TODO:
+        edited_pens = copy.deepcopy(self.pens)
         selected_pen_idx = [self.pen_index]
 
 
@@ -603,7 +603,8 @@ class MainWindow(Gtk.ApplicationWindow):
                 if t_id == "Pen":
                     new_pen = Pen(pen.name, color=pen.color, width=pen.width)
                 elif t_id == "CalligraphyPen":
-                    new_pen = CalligraphyPen(color=pen.color, width=pen.width, angle=45) # TODO: make angle editable
+                    # TODO: (LATER) make angle editable
+                    new_pen = CalligraphyPen(color=pen.color, width=pen.width, angle=45)
                     new_pen.pen = pen.name
                 elif t_id == "PointerPen":
                     new_pen = PointerPen(color=pen.color, width=pen.width)
@@ -634,7 +635,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
         # Add pen
         def on_add_clicked(btn):
-            new_pen = Pen("New Pen", color=(0,0,0,1), width=2)
+            new_pen = Pen("New Pen", color=(1,1,1,1), width=2)
             edited_pens.append(new_pen)
             row = Gtk.ListBoxRow()
             row.pen_index = len(edited_pens)-1
@@ -649,7 +650,7 @@ class MainWindow(Gtk.ApplicationWindow):
         def on_response(dlg, resp):
             if resp == Gtk.ResponseType.OK:
                 # Save changes: copy edited_pens to self.pens
-                self.pens = [copy.deepcopy(pen) for pen in edited_pens]
+                self.pens = copy.deepcopy(edited_pens)
                 self.recreate_pen_selector()
             dlg.destroy()
         dialog.connect("response", on_response)

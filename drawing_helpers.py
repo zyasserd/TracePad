@@ -267,10 +267,10 @@ class PointerPen(Pen):
     
 class Eraser(Pen):
     def __init__(self, width: int = 16, is_object_eraser=True) -> None:
-        # TODO: implement area eraser
+        # TODO: (LATER) implement area eraser
         assert(is_object_eraser)
         super().__init__(
-            "object" if is_object_eraser else "area" + " eraser",
+            ("object" if is_object_eraser else "area") + " eraser",
             (0.53, 0.53, 0.53, 1),
             width,
             supports_incremental_drawing=False,
@@ -324,7 +324,7 @@ class Stroke:
         if self.pen.stroke_add_point_handler:
             self.pen.stroke_add_point_handler(self)
 
-        # TODO: add future smoothening, if needed
+        # TODO: (LATER) add smoothening, if needed
             
 
     def draw(self, cr: cairo.Context, new_only: bool = False) -> None:

@@ -9,17 +9,18 @@
 
 
 # TO DO
-- Hamburger menu
-	- include shortcuts on the right of each item
+- make the color with curves
+- TODOs
 
-- Preferences
-	- pen types
+- organize the project files
+- test
+
+- license
 
 - publication
 	- fill the about information
 		- name
 		- icon
-		- license
 
 	- add to nixpkgs
 
@@ -62,6 +63,7 @@
 		- error for 1.5
 			- can't get the `AdwShortcutsDialog`
 
+- Save preferences
 
 - (feature) browse notes
 	- open file
@@ -72,6 +74,6 @@
 	- mostly use a library or sth for that don't do it manually
 	- https://www.youtube.com/watch?v=ueUgHvUT2Z0
 	- https://willowsystems.github.io/jSignature/%2523%252Fabout%252Flinesmoothing%252F.html
-		- TODO: design the oval pen?
+		- design the oval pen?
 	- https://github.com/google/ink-stroke-modeler
 
