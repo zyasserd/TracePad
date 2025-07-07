@@ -479,9 +479,13 @@ class MainWindow(Gtk.ApplicationWindow):
         prop_grid = Gtk.Grid(row_spacing=8, column_spacing=8, margin_start=16)
         box.append(prop_grid)
 
-        # Pen type mapping, TODO: change to a dict, or make it more elegant
-        pen_type_names = ["Pen", "CalligraphyPen", "PointerPen", "Eraser"]
-        pen_type_labels = ["Ballpoint", "Calligraphy", "Pointer", "Eraser"]
+        # Pen type mapping
+        pen_type_to_display_name = {
+            Pen : "Ballpoint",
+            CalligraphyPen: "Calligraphy",
+            PointerPen : "Pointer",
+            Eraser : "Eraser"
+        }
 
         # Property widgets
         name_entry = Gtk.Entry()
@@ -489,8 +493,8 @@ class MainWindow(Gtk.ApplicationWindow):
         width_adjustment = Gtk.Adjustment(value=1, lower=1, upper=64, step_increment=1, page_increment=4, page_size=0)
         width_spin = Gtk.SpinButton(adjustment=width_adjustment)
         type_combo = Gtk.ComboBoxText()
-        for t_name, label in zip(pen_type_names, pen_type_labels):
-            type_combo.append(t_name, label)
+        for (pen_type, display_name) in pen_type_to_display_name.items():
+            type_combo.append(pen_type.__name__, display_name)
 
         # Add Delete and Add Pen buttons side by side
         add_btn = Gtk.Button(label="+ Add Pen")
