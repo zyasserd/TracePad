@@ -22,7 +22,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
         # [[ HEADER BAR (Always Visible) ]]
         self.header_bar = Gtk.HeaderBar(
-            title_widget=Gtk.Label(label="Absolute Touchpad"),
+            title_widget=Gtk.Label(label="TracePad"),
             show_title_buttons=False,
             halign=Gtk.Align.FILL,
             valign=Gtk.Align.START
