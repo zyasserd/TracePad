@@ -143,7 +143,7 @@ class TouchpadReaderThread:
             self.reader_process.stdout.close()
 
     def stop(self):
-        # TODO: understand how the multithreading work here; then review this function
+        # TODO: (LATER) understand how the multithreading work here; then review this function
         self._should_stop.set()
         if self.reader_process and self.reader_process.poll() is None:
             try:

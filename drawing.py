@@ -406,10 +406,11 @@ class MainWindow(Gtk.ApplicationWindow):
             application_name="TracePad",
             version="1.0.0-beta",
             developer_name="Zyad Yasser",
-            copyright="© 2025 Your Name",
-            website="https://github.com/your-repo",
-            issue_url="https://github.com/your-repo/issues",
-            comments="A simple way to draw, doodle, and sign with your touchpad!\n\nThis app turns your laptop's touchpad into an easy-to-use digital canvas. Quickly sketch, jot notes, or capture your signature with just a few clicks. The clean fullscreen interface and straightforward pen tools make it perfect for anyone who wants a fast, no-fuss way to get creative or sign documents using their touchpad."
+            copyright="© 2025 Zyad Yasser",
+            website="https://github.com/zyasserd/TracePad",
+            issue_url="https://github.com/zyasserd/TracePad/issues",
+            comments="A simple way to draw, doodle, and sign with your touchpad!\nThis app turns your laptop's touchpad into an easy-to-use digital canvas. Quickly sketch, jot notes, or capture your signature with just a few clicks. The clean fullscreen interface and straightforward pen tools make it perfect for anyone who wants a fast, no-fuss way to get creative or sign documents using their touchpad.",
+            license_type=Gtk.License.GPL_3_0,
         )
         about.present()
 
@@ -478,12 +479,13 @@ class MainWindow(Gtk.ApplicationWindow):
         prop_grid = Gtk.Grid(row_spacing=8, column_spacing=8, margin_start=16)
         box.append(prop_grid)
 
-        # Pen type mapping, TODO:
+        # Pen type mapping, TODO: change to a dict, or make it more elegant
         pen_type_names = ["Pen", "CalligraphyPen", "PointerPen", "Eraser"]
         pen_type_labels = ["Ballpoint", "Calligraphy", "Pointer", "Eraser"]
 
         # Property widgets
         name_entry = Gtk.Entry()
+        color_dialog_btn = Gtk.ColorDialogButton()
         width_adjustment = Gtk.Adjustment(value=1, lower=1, upper=64, step_increment=1, page_increment=4, page_size=0)
         width_spin = Gtk.SpinButton(adjustment=width_adjustment)
         type_combo = Gtk.ComboBoxText()
@@ -498,21 +500,11 @@ class MainWindow(Gtk.ApplicationWindow):
         btn_box.append(delete_btn)
         btn_box.append(add_btn)
 
-        # Color display and color dialog in a horizontal box
-        color_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        color_canvas = Gtk.DrawingArea(
-            width_request=32,
-            height_request=32
-        )
-        color_box.append(color_canvas)
-        color_dialog_btn = Gtk.Button(label="Select Color")
-        color_box.append(color_dialog_btn)
-
         # Add to grid
         prop_grid.attach(Gtk.Label(label="Name:"), 0, 0, 1, 1)
         prop_grid.attach(name_entry, 1, 0, 1, 1)
         prop_grid.attach(Gtk.Label(label="Color:"), 0, 1, 1, 1)
-        prop_grid.attach(color_box, 1, 1, 1, 1)
+        prop_grid.attach(color_dialog_btn, 1, 1, 1, 1)
         prop_grid.attach(Gtk.Label(label="Width:"), 0, 2, 1, 1)
         prop_grid.attach(width_spin, 1, 2, 1, 1)
         prop_grid.attach(Gtk.Label(label="Type:"), 0, 3, 1, 1)
@@ -520,14 +512,17 @@ class MainWindow(Gtk.ApplicationWindow):
         prop_grid.attach(btn_box, 1, 4, 1, 1)
 
 
-
         # copy of pens
         edited_pens = copy.deepcopy(self.pens)
         selected_pen_idx = [self.pen_index]
 
+        def colorTupleToGdk(clr: Tuple[float, float, float, float]):
+            new_clr = Gdk.RGBA()
+            new_clr.red, new_clr.green, new_clr.blue, new_clr.alpha = clr
+            return new_clr
 
         # Color dialog logic
-        def on_color_dialog_clicked(btn):
+        def on_color_button_pressed(gesture, n_press, x, y):
             pen = edited_pens[selected_pen_idx[0]]
             dialog = Gtk.ColorDialog()
             def on_color_chosen(dialog, result):
@@ -537,17 +532,11 @@ class MainWindow(Gtk.ApplicationWindow):
                     return  # User dismissed dialog, ignore
                 if color:
                     pen.color = (color.red, color.green, color.blue, color.alpha)
-                    color_canvas.queue_draw()
-            dialog.choose_rgba(self, Gdk.RGBA(*pen.color), None, on_color_chosen)
-        color_dialog_btn.connect("clicked", on_color_dialog_clicked)
-
-
-        # The color to display is tracked in a closure
-        def draw_color_canvas(area, cr, width, height):
-            cr.set_source_rgba(*edited_pens[selected_pen_idx[0]].color)
-            cr.rectangle(0, 0, width, height)
-            cr.fill()
-        color_canvas.set_draw_func(draw_color_canvas)
+                    color_dialog_btn.set_rgba(colorTupleToGdk(pen.color))
+            dialog.choose_rgba(self, colorTupleToGdk(pen.color), None, on_color_chosen)
+        gesture = Gtk.GestureClick()
+        gesture.connect("pressed", on_color_button_pressed)
+        color_dialog_btn.add_controller(gesture)
 
 
         # Populate pens list
@@ -576,7 +565,7 @@ class MainWindow(Gtk.ApplicationWindow):
             type_combo.handler_block_by_func(on_prop_changed)
 
             name_entry.set_text(pen.name)
-            color_canvas.queue_draw()
+            color_dialog_btn.set_rgba(colorTupleToGdk(pen.color))
             width_spin.set_value(pen.width)
             type_combo.set_active_id(type(pen).__name__)
 
