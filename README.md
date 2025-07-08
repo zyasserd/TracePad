@@ -78,4 +78,4 @@ Years later, on Linux, I discovered that `evdev` allows access to raw touchpad d
 - Symbol recognition for LaTeX and Typst  
   - Like [Detexify](http://detexify.kirelabs.org/)  
   - [QuarticCat/detypify](https://github.com/QuarticCat/detypify)
-- Geometry sketching app (math symbols and diagrams)
+- Geometry sketching app
