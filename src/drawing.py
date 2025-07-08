@@ -172,12 +172,15 @@ class Eraser(Pen):
 
 class Stroke:
     def __init__(self, pen: Pen) -> None:
-        self.points = []
+        self.points : List[Vec2] = []
         self.last_drawn_index = 0
         self.pen = pen
 
     def add_point(self, point: Vec2) -> None:
-        self.points.append(point)
+        # to prevent jitter
+        if not self.points or self.points[-1].distance_to(point) > 2:
+            self.points.append(point)
+        
         if self.pen.stroke_add_point_handler:
             self.pen.stroke_add_point_handler(self)
 
