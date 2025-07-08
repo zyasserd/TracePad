@@ -48,7 +48,7 @@ class TouchpadReaderThread:
             try:
                 event = json.loads(line)
             except Exception:
-                GLib.idle_add(self.on_error, "Invalid JSON: [no error code] - " + "\n".join(self.reader_process.stdout.readlines()))
+                GLib.idle_add(self.on_error, "Invalid JSON: " + "\n".join(self.reader_process.stdout.readlines()))
                 break
 
             if 'error' in event:

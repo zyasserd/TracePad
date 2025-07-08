@@ -674,7 +674,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
 class MyApp(Adw.Application):
     def __init__(self) -> None:
-        super().__init__(application_id="org.example.FullscreenHiddenCursor")
+        super().__init__()
         self.connect('activate', self.on_activate)
 
     def on_activate(self, app: Adw.Application) -> None:

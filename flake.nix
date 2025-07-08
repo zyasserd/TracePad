@@ -31,6 +31,7 @@
       nativeBuildInputs = with pkgs; [
         libadwaita
         gobject-introspection
+        wrapGAppsHook
       ];
 
       env = {
@@ -52,12 +53,22 @@
 
       packages = rec {
         TracePad = pythonPackages.buildPythonApplication {
-          inherit propagatedBuildInputs nativeBuildInputs env;
+          inherit propagatedBuildInputs nativeBuildInputs;
           pname = "TracePad";
           version = "1.0.0-beta";
           src = ./.;
           format = "pyproject";
+
+          # env is just for build time; this is to expose in env variables in runtime
+          # https://ryantm.github.io/nixpkgs/languages-frameworks/gnome/
+          preFixup = ''
+            gappsWrapperArgs+=(
+              --prefix GDK_BACKEND : ${env.GDK_BACKEND}
+              --prefix PYTHON_NIX : ${env.PYTHON_NIX}
+            )
+          '';
         };
+
         default = TracePad;
       };
 

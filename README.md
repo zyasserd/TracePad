@@ -45,7 +45,7 @@ Years later, on Linux, I discovered that `evdev` allows access to raw touchpad d
 - Browse/open saved sketches  
   - Import from SVG or define custom file format
 - Save user preferences (via dconf or similar)
-- Add `.desktop` file and integrate application icon
+- Add `.desktop` file / integrate application icon / add application id
 - Publish to nixpkgs
 - (Low-priority) Palm rejection for capacitive stylus
 - (Low-priority) Real-time stroke smoothing  
