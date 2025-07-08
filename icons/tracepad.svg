@@ -1,0 +1,8 @@
+<svg width="240" height="180" viewBox="0 0 240 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- GNOME-style touchpad outline, 4:3 aspect ratio, wide -->
+  <rect x="30" y="30" width="180" height="120" rx="32" fill="#f8f9fa" stroke="#fff" stroke-width="3"/>
+  <rect x="30" y="30" width="180" height="120" rx="32" fill="none" stroke="#fff" stroke-width="9"/>
+  <rect x="30" y="30" width="180" height="120" rx="32" fill="none" stroke="#222" stroke-width="8"/>
+  <!-- Bold, smooth swoosh (gesture/checkmark) -->
+  <path d="M80 110 Q120 150 170 70" stroke="#3584e4" stroke-width="10" fill="none" stroke-linecap="round"/>
+</svg>
