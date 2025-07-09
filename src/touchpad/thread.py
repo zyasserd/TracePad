@@ -3,7 +3,8 @@ import sys
 import json
 import threading
 import subprocess
-from typing import Optional, Callable, Any
+import shutil
+from typing import Optional, Callable, Any, Optional
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -11,6 +12,27 @@ gi.require_version('Adw', '1')
 from gi.repository import GLib
 
 from vec2 import Vec2
+
+
+
+def is_pkexec_setup_properly() -> Optional[str]:
+    try:
+        # Attempt to run a harmless command with pkexec
+        result = subprocess.run(
+            ["pkexec", "echo", "test"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        # Check if the command succeeded
+        if result.returncode == 0:
+            return None  # No error
+        else:
+            return result.stderr.strip() or "Unknown error occurred."
+    except Exception as e:
+        # Return the exception message as an error
+        return str(e)
+
 
 class TouchpadReaderThread:
     def __init__(self, on_device_init: Callable[[], None], on_event: Callable[[Any], None], on_error: Callable[[str], None]) -> None:
@@ -23,10 +45,24 @@ class TouchpadReaderThread:
         self._should_stop = threading.Event()
 
     def start(self) -> None:
+        # check pkexec available
+        if not shutil.which("pkexec"):
+            GLib.idle_add(self.on_error, "pkexec is not installed or not found in PATH. Please install pkexec to continue.")
+            return
+
+        # check pkexec setup properly
+        if (err_msg := is_pkexec_setup_properly()) != None:
+            GLib.idle_add(
+                self.on_error, 
+                "pkexec is installed but not set up properly. Please ensure your user is allowed to run pkexec without authentication issues."
+                + f"\n\nError Message: {err_msg}"
+            )
+            return
+        
+
         # TODO: pkg_resources.resource_filename('fingerpaint', 'data/fix_permissions.sh')
         script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'reader.py'))
         python_exe = os.environ.get("PYTHON_NIX", sys.executable)
-        print(python_exe)
         self.reader_process = subprocess.Popen([
             'pkexec', python_exe, script_path
         ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -48,7 +84,7 @@ class TouchpadReaderThread:
             try:
                 event = json.loads(line)
             except Exception:
-                GLib.idle_add(self.on_error, "Invalid JSON: " + "\n".join(self.reader_process.stdout.readlines()))
+                GLib.idle_add(self.on_error, f"Invalid JSON: {line}" + "\n".join(self.reader_process.stdout.readlines()))
                 break
 
             if 'error' in event:

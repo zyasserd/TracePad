@@ -53,6 +53,29 @@ Years later, on Linux, I discovered that `evdev` allows access to raw touchpad d
   - [jSignature: Line Smoothing](https://willowsystems.github.io/jSignature/%2523%252Fabout%252Flinesmoothing%252F.html)
 
 
+## 🚀 How to Run
+
+### Using Nix
+
+You can run TracePad directly using Nix Flakes. Simply execute:
+
+```bash
+nix run github:zyasserd/TracePad
+```
+
+This will build and launch the application.
+
+### Entering the Development Shell
+
+To enter a development environment with all dependencies set up, use:
+
+```bash
+nix develop
+```
+
+You can also use [direnv](https://direnv.net/) to automatically load the development environment when you enter the project directory.
+
+
 ## 🧑‍💻 Developer Notes
 
 - Wayland restricts pointer locking/capturing, so fullscreen + hidden pointer is used instead.
