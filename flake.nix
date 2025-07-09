@@ -55,11 +55,12 @@
         packages = propagatedBuildInputs ++ buildInputs ++ nativeBuildInputs ++ [ 
         ];
 
-        # Note: pkexec is not available in `nix develop` by default.
-        # Adding polkit via Nix provides pkexec, but it lacks the required setuid bit.
-        # Workarounds:
-        #   - Manually set up pkexec with the correct permissions, OR
-        #   - Use direnv to allow the system pkexec to be accessible.
+
+        # to fix the pkexec error:
+        #   "The value for the SHELL variable was not found in the /etc/shells file"
+        shellHook = ''
+          export SHELL=/bin/sh
+        '';
 
       };
 

@@ -15,23 +15,10 @@ from vec2 import Vec2
 
 
 
-def is_pkexec_setup_properly() -> Optional[str]:
-    try:
-        # Attempt to run a harmless command with pkexec
-        result = subprocess.run(
-            ["pkexec", "echo", "test"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        # Check if the command succeeded
-        if result.returncode == 0:
-            return None  # No error
-        else:
-            return result.stderr.strip() or "Unknown error occurred."
-    except Exception as e:
-        # Return the exception message as an error
-        return str(e)
+PKEXEC_EXIT_CODE_MESSAGES = {
+    126: "pkexec: Authorization could not be obtained because the user dismissed the authentication dialog.",
+    127: "pkexec: Not authorized or authentication failed, or an error occurred.",
+}
 
 
 class TouchpadReaderThread:
@@ -50,28 +37,38 @@ class TouchpadReaderThread:
             GLib.idle_add(self.on_error, "pkexec is not installed or not found in PATH. Please install pkexec to continue.")
             return
 
-        # check pkexec setup properly
-        if (err_msg := is_pkexec_setup_properly()) != None:
-            GLib.idle_add(
-                self.on_error, 
-                "pkexec is installed but not set up properly. Please ensure your user is allowed to run pkexec without authentication issues."
-                + f"\n\nError Message: {err_msg}"
-            )
-            return
-        
-
         # TODO: pkg_resources.resource_filename('fingerpaint', 'data/fix_permissions.sh')
         script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'reader.py'))
         python_exe = os.environ.get("PYTHON_NIX", sys.executable)
+
         self.reader_process = subprocess.Popen([
             'pkexec', python_exe, script_path
         ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        
         self.reader_thread = threading.Thread(target=self._read_output, daemon=True)
         self.reader_thread.start()
 
+    def _handle_pkexec_exit_code(self):
+        if not self.reader_process:
+            return False
+        
+        exit_code = self.reader_process.poll()
+        if exit_code not in PKEXEC_EXIT_CODE_MESSAGES:
+            return False
+        
+        GLib.idle_add(
+            self.on_error,
+            PKEXEC_EXIT_CODE_MESSAGES[exit_code]
+        )
+        if self.reader_process.stdout:
+            self.reader_process.stdout.close()
+        return True
+        
     def _read_output(self) -> None:
         if not self.reader_process or not self.reader_process.stdout:
             return
+        
+        error_to_report = None
 
         for line in self.reader_process.stdout:
             if self._should_stop.is_set():
@@ -84,13 +81,13 @@ class TouchpadReaderThread:
             try:
                 event = json.loads(line)
             except Exception:
-                GLib.idle_add(self.on_error, f"Invalid JSON: {line}" + "\n".join(self.reader_process.stdout.readlines()))
+                error_to_report = f"Invalid JSON: {line}" + "\n".join(self.reader_process.stdout.readlines())
                 break
 
             if 'error' in event:
                 error_code = event.get('error', 'Error')
                 error_msg = event.get('message', '')
-                GLib.idle_add(self.on_error, f"{error_code}: {error_msg}")
+                error_to_report = f"{error_code}: {error_msg}"
                 break
             elif event.get('event') == 'device_info':
                 data = event.get('data', {})
@@ -100,10 +97,13 @@ class TouchpadReaderThread:
             elif event.get('event') == 'touch_update':
                 GLib.idle_add(self.on_event, event['data'])
             
-            # ignore shutdown event type
 
         if self.reader_process.stdout:
             self.reader_process.stdout.close()
+        
+        # After reading loop, check for pkexec exit code, and those take priority
+        if not self._handle_pkexec_exit_code() and error_to_report:
+            self._report_error(error_to_report)
 
     def stop(self):
         # TODO: (LATER) understand how the multithreading work here; then review this function
