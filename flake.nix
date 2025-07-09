@@ -73,8 +73,10 @@
           src = ./.;
           format = "pyproject";
 
-          # env is just for build time; this is to expose in env variables in runtime
-          # https://ryantm.github.io/nixpkgs/languages-frameworks/gnome/
+          # Prevent double-wrapping caused by both wrapGAppsHook and buildPythonApplication.
+          # Check this: https://ryantm.github.io/nixpkgs/languages-frameworks/gnome/
+          dontWrapGApps = true;
+
           preFixup = let
             vars =
               pkgs.lib.strings.concatMapStringsSep
@@ -82,9 +84,14 @@
                 (name: "  --prefix ${name} : ${env.${name}}")
                 (builtins.attrNames env);
           in ''
+            # Note: `env` only affects the build environment.
+            #       To propagate variables to the wrapped executable at runtime, use wrapProgram.
             gappsWrapperArgs+=(
               ${vars}
             )
+
+            # Forward GNOME-related env vars to the Python wrapper.
+            makeWrapperArgs+=("''${gappsWrapperArgs[@]}")
           '';
         };
 
