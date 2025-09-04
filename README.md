@@ -42,6 +42,7 @@ Years later, on Linux, I discovered that `evdev` allows access to raw touchpad d
 - Preferences dialog to customize and manage pens
 
 **Planned:**
+- auto crop to content
 - Browse/open saved sketches  
   - Import from SVG or define custom file format
 - Save user preferences (via dconf or similar)
